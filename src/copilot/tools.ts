@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { defineTool, type CopilotClient, type CopilotSession, type Tool } from "@github/copilot-sdk";
 import { getDb } from "../store/db.js";
+import { readdirSync, readFileSync, statSync } from "fs";
+import { join } from "path";
+import { homedir } from "os";
 
 export interface WorkerInfo {
   name: string;
@@ -178,36 +181,59 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
     defineTool("list_machine_sessions", {
       description:
         "List ALL Copilot CLI sessions on this machine — including sessions started from VS Code, " +
-        "the terminal, or other tools. Shows session ID, summary, working directory, repo, and branch. " +
-        "Use this when the user asks about existing sessions running on the machine.",
+        "the terminal, or other tools. Shows session ID, summary, working directory. " +
+        "Use this when the user asks about existing sessions running on the machine. " +
+        "By default shows the 20 most recently active sessions.",
       parameters: z.object({
-        cwd: z.string().optional().describe("Optional: filter by working directory"),
-        repository: z.string().optional().describe("Optional: filter by GitHub repo (owner/repo format)"),
+        cwd_filter: z.string().optional().describe("Optional: only show sessions whose working directory contains this string"),
+        limit: z.number().int().min(1).max(100).optional().describe("Max sessions to return (default 20)"),
       }),
       handler: async (args) => {
-        const filter: Record<string, string> = {};
-        if (args.cwd) filter.cwd = args.cwd;
-        if (args.repository) filter.repository = args.repository;
+        const sessionStateDir = join(homedir(), ".copilot", "session-state");
+        const limit = args.limit || 20;
 
-        const sessions = await deps.client.listSessions(
-          Object.keys(filter).length > 0 ? filter : undefined
-        );
+        let entries: { id: string; cwd: string; summary: string; updatedAt: Date }[] = [];
 
-        if (sessions.length === 0) {
+        try {
+          const dirs = readdirSync(sessionStateDir);
+          for (const dir of dirs) {
+            const yamlPath = join(sessionStateDir, dir, "workspace.yaml");
+            try {
+              const content = readFileSync(yamlPath, "utf-8");
+              const parsed = parseSimpleYaml(content);
+              if (args.cwd_filter && !parsed.cwd?.includes(args.cwd_filter)) continue;
+              entries.push({
+                id: parsed.id || dir,
+                cwd: parsed.cwd || "unknown",
+                summary: parsed.summary || "",
+                updatedAt: parsed.updated_at ? new Date(parsed.updated_at) : new Date(0),
+              });
+            } catch {
+              // Skip dirs without valid workspace.yaml
+            }
+          }
+        } catch (err: unknown) {
+          if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+            return "No Copilot sessions found on this machine (session state directory does not exist yet).";
+          }
+          return "Could not read session state directory.";
+        }
+
+        // Sort by most recently updated
+        entries.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+        entries = entries.slice(0, limit);
+
+        if (entries.length === 0) {
           return "No Copilot sessions found on this machine.";
         }
 
-        const lines = sessions.map((s) => {
-          const ctx = s.context;
-          const dir = ctx?.cwd || "unknown";
-          const repo = ctx?.repository ? ` (${ctx.repository})` : "";
-          const branch = ctx?.branch ? ` [${ctx.branch}]` : "";
+        const lines = entries.map((s) => {
+          const age = formatAge(s.updatedAt);
           const summary = s.summary ? ` — ${s.summary}` : "";
-          const age = formatAge(s.modifiedTime);
-          return `• ID: ${s.sessionId}\n  ${dir}${repo}${branch} (${age})${summary}`;
+          return `• ID: ${s.id}\n  ${s.cwd} (${age})${summary}`;
         });
 
-        return `Found ${sessions.length} session(s) on this machine:\n${lines.join("\n")}`;
+        return `Found ${entries.length} session(s) (most recent first):\n${lines.join("\n")}`;
       },
     }),
 
@@ -259,4 +285,17 @@ function formatAge(date: Date): string {
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
   return `${Math.floor(seconds / 86400)}d ago`;
+}
+
+function parseSimpleYaml(content: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const line of content.split("\n")) {
+    const idx = line.indexOf(": ");
+    if (idx > 0) {
+      const key = line.slice(0, idx).trim();
+      const value = line.slice(idx + 2).trim();
+      result[key] = value;
+    }
+  }
+  return result;
 }
