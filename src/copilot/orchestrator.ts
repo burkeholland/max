@@ -76,7 +76,7 @@ async function processQueue(): Promise<void> {
   });
 
   try {
-    const result = await orchestratorSession.sendAndWait({ prompt: request.prompt });
+    const result = await orchestratorSession.sendAndWait({ prompt: request.prompt }, 300_000);
     const finalContent = result?.data?.content || accumulated || "(No response)";
     logMessage("out", sourceLabel, finalContent);
     request.callback(finalContent, true);
