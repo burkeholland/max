@@ -89,3 +89,12 @@ export function startApiServer(): Promise<void> {
     });
   });
 }
+
+/** Broadcast a proactive message to all connected SSE clients (for background task completions). */
+export function broadcastToSSE(text: string): void {
+  for (const [, res] of sseClients) {
+    res.write(
+      `data: ${JSON.stringify({ type: "message", content: text })}\n\n`
+    );
+  }
+}

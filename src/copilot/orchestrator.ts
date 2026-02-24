@@ -5,7 +5,8 @@ import { config } from "../config.js";
 
 export type MessageSource =
   | { type: "telegram"; chatId: number }
-  | { type: "tui"; connectionId: string };
+  | { type: "tui"; connectionId: string }
+  | { type: "background" };
 
 export type MessageCallback = (text: string, done: boolean) => void;
 
@@ -14,6 +15,14 @@ let logMessage: LogFn = () => {};
 
 export function setMessageLogger(fn: LogFn): void {
   logMessage = fn;
+}
+
+// Proactive notification — sends unsolicited messages to the user
+type ProactiveNotifyFn = (text: string) => void;
+let proactiveNotifyFn: ProactiveNotifyFn | undefined;
+
+export function setProactiveNotify(fn: ProactiveNotifyFn): void {
+  proactiveNotifyFn = fn;
 }
 
 interface PendingRequest {
@@ -27,8 +36,26 @@ const workers = new Map<string, WorkerInfo>();
 const requestQueue: PendingRequest[] = [];
 let processing = false;
 
+/** Feed a background worker result into the orchestrator as a new turn. */
+export function feedBackgroundResult(workerName: string, result: string): void {
+  const prompt = `[Background task completed] Worker '${workerName}' finished:\n\n${result}`;
+  sendToOrchestrator(
+    prompt,
+    { type: "background" },
+    (_text, done) => {
+      if (done && proactiveNotifyFn) {
+        proactiveNotifyFn(_text);
+      }
+    }
+  );
+}
+
 export async function initOrchestrator(client: CopilotClient): Promise<void> {
-  const tools = createTools({ client, workers });
+  const tools = createTools({
+    client,
+    workers,
+    onWorkerComplete: feedBackgroundResult,
+  });
 
   orchestratorSession = await client.createSession({
     model: config.copilotModel,
@@ -54,8 +81,10 @@ async function processQueue(): Promise<void> {
   processing = true;
 
   const request = requestQueue.shift()!;
-  const sourceLabel = request.source.type === "telegram" ? "telegram" : "tui";
-  logMessage("in", sourceLabel, request.prompt);;
+  const sourceLabel =
+    request.source.type === "telegram" ? "telegram" :
+    request.source.type === "tui" ? "tui" : "background";
+  logMessage("in", sourceLabel, request.prompt);
 
   if (!orchestratorSession) {
     request.callback("Max is not ready yet. Please try again in a moment.", true);

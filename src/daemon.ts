@@ -1,7 +1,7 @@
 import { getClient, stopClient } from "./copilot/client.js";
-import { initOrchestrator, setMessageLogger } from "./copilot/orchestrator.js";
-import { startApiServer } from "./api/server.js";
-import { createBot, startBot, stopBot } from "./telegram/bot.js";
+import { initOrchestrator, setMessageLogger, setProactiveNotify } from "./copilot/orchestrator.js";
+import { startApiServer, broadcastToSSE } from "./api/server.js";
+import { createBot, startBot, stopBot, sendProactiveMessage } from "./telegram/bot.js";
 import { getDb, closeDb } from "./store/db.js";
 
 function truncate(text: string, max = 200): string {
@@ -32,6 +32,13 @@ async function main(): Promise<void> {
   console.log("[max] Creating orchestrator session...");
   await initOrchestrator(client);
   console.log("[max] Orchestrator session ready");
+
+  // Wire up proactive notifications for background task completions
+  setProactiveNotify((text) => {
+    console.log(`[max] bg-notify ⟵  ${truncate(text)}`);
+    sendProactiveMessage(text);
+    broadcastToSSE(text);
+  });
 
   // Start HTTP API for TUI
   await startApiServer();

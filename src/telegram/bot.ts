@@ -141,3 +141,16 @@ export async function stopBot(): Promise<void> {
     await bot.stop();
   }
 }
+
+/** Send an unsolicited message to the authorized user (for background task completions). */
+export async function sendProactiveMessage(text: string): Promise<void> {
+  if (!bot) return;
+  const chunks = chunkMessage(text);
+  for (const chunk of chunks) {
+    try {
+      await bot.api.sendMessage(config.authorizedUserId, chunk);
+    } catch {
+      // Bot may not be connected yet
+    }
+  }
+}

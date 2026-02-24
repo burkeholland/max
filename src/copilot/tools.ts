@@ -16,6 +16,7 @@ export interface WorkerInfo {
 export interface ToolDeps {
   client: CopilotClient;
   workers: Map<string, WorkerInfo>;
+  onWorkerComplete: (name: string, result: string) => void;
 }
 
 export function createTools(deps: ToolDeps): Tool<any>[] {
@@ -57,24 +58,31 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
 
         if (args.initial_prompt) {
           worker.status = "running";
-          try {
-            const result = await session.sendAndWait({
-              prompt: `Working directory: ${args.working_dir}\n\n${args.initial_prompt}`,
-            });
+          db.prepare(
+            `UPDATE worker_sessions SET status = 'running', updated_at = CURRENT_TIMESTAMP WHERE name = ?`
+          ).run(args.name);
+
+          // Non-blocking: dispatch work and return immediately
+          session.sendAndWait({
+            prompt: `Working directory: ${args.working_dir}\n\n${args.initial_prompt}`,
+          }).then((result) => {
             worker.status = "idle";
             worker.lastOutput = result?.data?.content || "No response";
             db.prepare(
               `UPDATE worker_sessions SET status = 'idle', last_output = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?`
             ).run(worker.lastOutput, args.name);
-            return `Worker '${args.name}' created in ${args.working_dir}.\n\nResponse:\n${worker.lastOutput}`;
-          } catch (err) {
+            deps.onWorkerComplete(args.name, worker.lastOutput);
+          }).catch((err) => {
             worker.status = "error";
             const msg = err instanceof Error ? err.message : String(err);
+            worker.lastOutput = msg;
             db.prepare(
               `UPDATE worker_sessions SET status = 'error', last_output = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?`
             ).run(msg, args.name);
-            return `Worker '${args.name}' created but initial prompt failed: ${msg}`;
-          }
+            deps.onWorkerComplete(args.name, `Error: ${msg}`);
+          });
+
+          return `Worker '${args.name}' created in ${args.working_dir}. Task dispatched — I'll notify you when it's done.`;
         }
 
         return `Worker '${args.name}' created in ${args.working_dir}. Use send_to_worker to send it prompts.`;
@@ -104,22 +112,25 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
           args.name
         );
 
-        try {
-          const result = await worker.session.sendAndWait({ prompt: args.prompt });
+        // Non-blocking: dispatch work and return immediately
+        worker.session.sendAndWait({ prompt: args.prompt }).then((result) => {
           worker.status = "idle";
           worker.lastOutput = result?.data?.content || "No response";
           db.prepare(
             `UPDATE worker_sessions SET status = 'idle', last_output = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?`
           ).run(worker.lastOutput, args.name);
-          return worker.lastOutput;
-        } catch (err) {
+          deps.onWorkerComplete(args.name, worker.lastOutput);
+        }).catch((err) => {
           worker.status = "error";
           const msg = err instanceof Error ? err.message : String(err);
+          worker.lastOutput = msg;
           db.prepare(
             `UPDATE worker_sessions SET status = 'error', last_output = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?`
           ).run(msg, args.name);
-          return `Worker '${args.name}' error: ${msg}`;
-        }
+          deps.onWorkerComplete(args.name, `Error: ${msg}`);
+        });
+
+        return `Task dispatched to worker '${args.name}'. I'll notify you when it's done.`;
       },
     }),
 
