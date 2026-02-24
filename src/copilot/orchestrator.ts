@@ -9,6 +9,13 @@ export type MessageSource =
 
 export type MessageCallback = (text: string, done: boolean) => void;
 
+type LogFn = (direction: "in" | "out", source: string, text: string) => void;
+let logMessage: LogFn = () => {};
+
+export function setMessageLogger(fn: LogFn): void {
+  logMessage = fn;
+}
+
 interface PendingRequest {
   prompt: string;
   source: MessageSource;
@@ -47,6 +54,8 @@ async function processQueue(): Promise<void> {
   processing = true;
 
   const request = requestQueue.shift()!;
+  const sourceLabel = request.source.type === "telegram" ? "telegram" : "tui";
+  logMessage("in", sourceLabel, request.prompt);;
 
   if (!orchestratorSession) {
     request.callback("Max is not ready yet. Please try again in a moment.", true);
@@ -69,6 +78,7 @@ async function processQueue(): Promise<void> {
   try {
     const result = await orchestratorSession.sendAndWait({ prompt: request.prompt });
     const finalContent = result?.data?.content || accumulated || "(No response)";
+    logMessage("out", sourceLabel, finalContent);
     request.callback(finalContent, true);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

@@ -1,11 +1,23 @@
 import { getClient, stopClient } from "./copilot/client.js";
-import { initOrchestrator } from "./copilot/orchestrator.js";
+import { initOrchestrator, setMessageLogger } from "./copilot/orchestrator.js";
 import { startApiServer } from "./api/server.js";
 import { createBot, startBot, stopBot } from "./telegram/bot.js";
 import { getDb, closeDb } from "./store/db.js";
 
+function truncate(text: string, max = 200): string {
+  const oneLine = text.replace(/\n/g, " ").trim();
+  return oneLine.length > max ? oneLine.slice(0, max) + "…" : oneLine;
+}
+
 async function main(): Promise<void> {
   console.log("[max] Starting Max daemon...");
+
+  // Set up message logging to daemon console
+  setMessageLogger((direction, source, text) => {
+    const arrow = direction === "in" ? "⟶" : "⟵";
+    const tag = source.padEnd(8);
+    console.log(`[max] ${tag} ${arrow}  ${truncate(text)}`);
+  });
 
   // Initialize SQLite
   getDb();

@@ -174,5 +174,89 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
         return `Worker '${args.name}' terminated.`;
       },
     }),
+
+    defineTool("list_machine_sessions", {
+      description:
+        "List ALL Copilot CLI sessions on this machine — including sessions started from VS Code, " +
+        "the terminal, or other tools. Shows session ID, summary, working directory, repo, and branch. " +
+        "Use this when the user asks about existing sessions running on the machine.",
+      parameters: z.object({
+        cwd: z.string().optional().describe("Optional: filter by working directory"),
+        repository: z.string().optional().describe("Optional: filter by GitHub repo (owner/repo format)"),
+      }),
+      handler: async (args) => {
+        const filter: Record<string, string> = {};
+        if (args.cwd) filter.cwd = args.cwd;
+        if (args.repository) filter.repository = args.repository;
+
+        const sessions = await deps.client.listSessions(
+          Object.keys(filter).length > 0 ? filter : undefined
+        );
+
+        if (sessions.length === 0) {
+          return "No Copilot sessions found on this machine.";
+        }
+
+        const lines = sessions.map((s) => {
+          const ctx = s.context;
+          const dir = ctx?.cwd || "unknown";
+          const repo = ctx?.repository ? ` (${ctx.repository})` : "";
+          const branch = ctx?.branch ? ` [${ctx.branch}]` : "";
+          const summary = s.summary ? ` — ${s.summary}` : "";
+          const age = formatAge(s.modifiedTime);
+          return `• ID: ${s.sessionId}\n  ${dir}${repo}${branch} (${age})${summary}`;
+        });
+
+        return `Found ${sessions.length} session(s) on this machine:\n${lines.join("\n")}`;
+      },
+    }),
+
+    defineTool("attach_machine_session", {
+      description:
+        "Attach to an existing Copilot CLI session on this machine (e.g. one started from VS Code or terminal). " +
+        "Resumes the session and adds it as a managed worker so you can send prompts to it.",
+      parameters: z.object({
+        session_id: z.string().describe("The session ID to attach to (from list_machine_sessions)"),
+        name: z.string().describe("A short name to reference this session by, e.g. 'vscode-main'"),
+      }),
+      handler: async (args) => {
+        if (deps.workers.has(args.name)) {
+          return `A worker named '${args.name}' already exists. Choose a different name.`;
+        }
+
+        try {
+          const session = await deps.client.resumeSession(args.session_id, {
+            model: "claude-sonnet-4.5",
+          });
+
+          const worker: WorkerInfo = {
+            name: args.name,
+            session,
+            workingDir: "(attached)",
+            status: "idle",
+          };
+          deps.workers.set(args.name, worker);
+
+          const db = getDb();
+          db.prepare(
+            `INSERT OR REPLACE INTO worker_sessions (name, copilot_session_id, working_dir, status)
+             VALUES (?, ?, '(attached)', 'idle')`
+          ).run(args.name, args.session_id);
+
+          return `Attached to session ${args.session_id.slice(0, 8)}… as worker '${args.name}'. You can now send_to_worker to interact with it.`;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return `Failed to attach to session: ${msg}`;
+        }
+      },
+    }),
   ];
+}
+
+function formatAge(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
 }

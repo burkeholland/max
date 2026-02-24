@@ -35,6 +35,23 @@ export function createBot(): Bot {
     const chatId = ctx.chat.id;
     let lastSentText = "";
 
+    // Show "typing..." indicator, repeat every 4s while processing
+    let typingInterval: ReturnType<typeof setInterval> | undefined;
+    const startTyping = () => {
+      void ctx.replyWithChatAction("typing").catch(() => {});
+      typingInterval = setInterval(() => {
+        void ctx.replyWithChatAction("typing").catch(() => {});
+      }, 4000);
+    };
+    const stopTyping = () => {
+      if (typingInterval) {
+        clearInterval(typingInterval);
+        typingInterval = undefined;
+      }
+    };
+
+    startTyping();
+
     // Debounce streaming updates for Telegram (avoid rate limits)
     let updateTimer: ReturnType<typeof setTimeout> | undefined;
     let pendingText = "";
@@ -65,6 +82,7 @@ export function createBot(): Bot {
 
         if (done) {
           if (updateTimer) clearTimeout(updateTimer);
+          stopTyping();
           // Send final message — use chunking for long responses
           void (async () => {
             const chunks = chunkMessage(text);
