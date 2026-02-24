@@ -1,0 +1,31 @@
+{
+  "name": "max",
+  "version": "1.0.0",
+  "description": "AI orchestrator powered by Copilot SDK — control via Telegram or TUI",
+  "main": "dist/daemon.js",
+  "scripts": {
+    "build": "tsc",
+    "daemon": "tsx src/daemon.ts",
+    "tui": "tsx src/tui/index.ts",
+    "dev": "tsx --watch src/daemon.ts"
+  },
+  "keywords": ["copilot", "telegram", "orchestrator"],
+  "author": "Burke Holland",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@github/copilot-sdk": "^0.1.26",
+    "better-sqlite3": "^12.6.2",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "grammy": "^1.40.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.3.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
