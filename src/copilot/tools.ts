@@ -4,6 +4,7 @@ import { getDb } from "../store/db.js";
 import { readdirSync, readFileSync, statSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { listSkills, createSkill } from "./skills.js";
 
 export interface WorkerInfo {
   name: string;
@@ -285,6 +286,46 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
           const msg = err instanceof Error ? err.message : String(err);
           return `Failed to attach to session: ${msg}`;
         }
+      },
+    }),
+
+    defineTool("list_skills", {
+      description:
+        "List all available skills that Max knows. Skills are instruction documents that teach Max " +
+        "how to use external tools and services (e.g. Gmail, browser automation, YouTube transcripts). " +
+        "Shows skill name, description, and whether it's a local or global skill.",
+      parameters: z.object({}),
+      handler: async () => {
+        const skills = listSkills();
+        if (skills.length === 0) {
+          return "No skills installed yet. Use learn_skill to teach me something new.";
+        }
+        const lines = skills.map(
+          (s) => `• ${s.name} (${s.source}) — ${s.description}`
+        );
+        return `Available skills (${skills.length}):\n${lines.join("\n")}`;
+      },
+    }),
+
+    defineTool("learn_skill", {
+      description:
+        "Teach Max a new skill by creating a SKILL.md instruction file. Use this when the user asks Max " +
+        "to do something it doesn't know how to do yet (e.g. 'check my email', 'search the web'). " +
+        "First, use a worker session to research what CLI tools are available on the system (run 'which', " +
+        "'--help', etc.), then create the skill with the instructions you've learned. " +
+        "The skill becomes available after restarting the daemon.",
+      parameters: z.object({
+        slug: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).describe("Short kebab-case identifier for the skill, e.g. 'gmail', 'web-search'"),
+        name: z.string().refine(s => !s.includes('\n'), "must be single-line").describe("Human-readable name for the skill, e.g. 'Gmail', 'Web Search'"),
+        description: z.string().refine(s => !s.includes('\n'), "must be single-line").describe("One-line description of when to use this skill"),
+        instructions: z.string().describe(
+          "Markdown instructions for how to use the skill. Include: what CLI tool to use, " +
+          "common commands with examples, authentication steps if needed, tips and gotchas. " +
+          "This becomes the SKILL.md content body."
+        ),
+      }),
+      handler: async (args) => {
+        return createSkill(args.slug, args.name, args.description, args.instructions);
       },
     }),
   ];

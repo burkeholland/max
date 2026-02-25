@@ -2,6 +2,8 @@ import type { CopilotClient, CopilotSession } from "@github/copilot-sdk";
 import { createTools, type WorkerInfo } from "./tools.js";
 import { ORCHESTRATOR_SYSTEM_MESSAGE } from "./system-message.js";
 import { config } from "../config.js";
+import { loadMcpConfig } from "./mcp-config.js";
+import { getSkillDirectories } from "./skills.js";
 
 export type MessageSource =
   | { type: "telegram"; chatId: number }
@@ -57,6 +59,12 @@ export async function initOrchestrator(client: CopilotClient): Promise<void> {
     onWorkerComplete: feedBackgroundResult,
   });
 
+  const mcpServers = loadMcpConfig();
+  const skillDirectories = getSkillDirectories();
+
+  console.log(`[max] Loading ${Object.keys(mcpServers).length} MCP server(s): ${Object.keys(mcpServers).join(", ") || "(none)"}`);
+  console.log(`[max] Skill directories: ${skillDirectories.join(", ") || "(none)"}`);
+
   orchestratorSession = await client.createSession({
     model: config.copilotModel,
     streaming: true,
@@ -64,6 +72,8 @@ export async function initOrchestrator(client: CopilotClient): Promise<void> {
       content: ORCHESTRATOR_SYSTEM_MESSAGE,
     },
     tools,
+    mcpServers,
+    skillDirectories,
   });
 }
 
