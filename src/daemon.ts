@@ -71,6 +71,14 @@ async function shutdown(): Promise<void> {
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
+// Prevent unhandled errors from crashing the daemon
+process.on("unhandledRejection", (reason) => {
+  console.error("[max] Unhandled rejection (kept alive):", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[max] Uncaught exception (kept alive):", err.message);
+});
+
 main().catch((err) => {
   console.error("[max] Fatal error:", err);
   process.exit(1);

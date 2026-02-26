@@ -5,8 +5,12 @@ import { config } from "../config.js";
 import { loadMcpConfig } from "./mcp-config.js";
 import { getSkillDirectories } from "./skills.js";
 import { getState, setState } from "../store/db.js";
+import { resetClient } from "./client.js";
 
 const SESSION_ID_KEY = "orchestrator_session_id";
+const MAX_RETRIES = 5;
+const HEALTH_CHECK_INTERVAL_MS = 30_000;
+const RECONNECT_DELAYS_MS = [1_000, 2_000, 5_000, 10_000, 20_000];
 
 export type MessageSource =
   | { type: "telegram"; chatId: number }
@@ -37,14 +41,13 @@ interface PendingRequest {
   retries?: number;
 }
 
-const MAX_RETRIES = 2;
-
 let orchestratorSession: CopilotSession | undefined;
 let copilotClient: CopilotClient | undefined;
 const workers = new Map<string, WorkerInfo>();
 const requestQueue: PendingRequest[] = [];
 let processing = false;
 let reconnecting = false;
+let healthCheckTimer: ReturnType<typeof setInterval> | undefined;
 
 function getSessionConfig() {
   const tools = createTools({
@@ -71,6 +74,28 @@ export function feedBackgroundResult(workerName: string, result: string): void {
   );
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Start periodic health check that proactively reconnects when the client drops. */
+function startHealthCheck(): void {
+  if (healthCheckTimer) return;
+  healthCheckTimer = setInterval(async () => {
+    if (!copilotClient || reconnecting) return;
+    try {
+      const state = copilotClient.getState();
+      if (state !== "connected") {
+        console.log(`[max] Health check: client state is '${state}', triggering reconnect…`);
+        orchestratorSession = undefined;
+        await reconnectOrchestrator();
+      }
+    } catch (err) {
+      console.error(`[max] Health check error:`, err instanceof Error ? err.message : err);
+    }
+  }, HEALTH_CHECK_INTERVAL_MS);
+}
+
 export async function initOrchestrator(client: CopilotClient): Promise<void> {
   copilotClient = client;
   const { tools, mcpServers, skillDirectories } = getSessionConfig();
@@ -92,6 +117,7 @@ export async function initOrchestrator(client: CopilotClient): Promise<void> {
         onPermissionRequest: approveAll,
       });
       console.log(`[max] Orchestrator session resumed successfully`);
+      startHealthCheck();
       return;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -115,20 +141,28 @@ export async function initOrchestrator(client: CopilotClient): Promise<void> {
   // Persist session ID for future reconnection
   setState(SESSION_ID_KEY, orchestratorSession.sessionId);
   console.log(`[max] New orchestrator session: ${orchestratorSession.sessionId.slice(0, 8)}…`);
+  startHealthCheck();
 }
 
 /** Attempt to reconnect the orchestrator session after a failure. */
 async function reconnectOrchestrator(): Promise<boolean> {
-  if (reconnecting || !copilotClient) return false;
+  if (reconnecting) return false;
   reconnecting = true;
 
   try {
     console.log(`[max] Reconnecting orchestrator…`);
 
-    // Ensure client is connected
-    if (copilotClient.getState() !== "connected") {
-      console.log(`[max] Client disconnected, restarting…`);
-      await copilotClient.start();
+    // If the client itself is dead, create a brand new one
+    if (!copilotClient || copilotClient.getState() !== "connected") {
+      console.log(`[max] Client not connected (state: ${copilotClient?.getState() ?? "null"}), resetting client…`);
+      try {
+        copilotClient = await resetClient();
+        console.log(`[max] Client reset successful, state: ${copilotClient.getState()}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[max] Client reset failed: ${msg}. Will retry on next attempt.`);
+        return false;
+      }
     }
 
     const { tools, mcpServers, skillDirectories } = getSessionConfig();
@@ -185,7 +219,7 @@ export async function sendToOrchestrator(
 
 function isConnectionError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
-  return /timeout|disconnect|connection|EPIPE|ECONNRESET|ECONNREFUSED|socket|closed/i.test(msg);
+  return /timeout|disconnect|connection|EPIPE|ECONNRESET|ECONNREFUSED|socket|closed|ENOENT|spawn|kill/i.test(msg);
 }
 
 async function processQueue(): Promise<void> {
@@ -210,17 +244,19 @@ async function processQueue(): Promise<void> {
   }
 
   let accumulated = "";
-
-  const unsubDelta = orchestratorSession!.on("assistant.message_delta", (event) => {
-    accumulated += event.data.deltaContent;
-    request.callback(accumulated, false);
-  });
-
-  const unsubIdle = orchestratorSession!.on("session.idle", () => {
-    // Cleanup happens below after sendAndWait resolves
-  });
+  let unsubDelta: (() => void) | undefined;
+  let unsubIdle: (() => void) | undefined;
 
   try {
+    unsubDelta = orchestratorSession!.on("assistant.message_delta", (event) => {
+      accumulated += event.data.deltaContent;
+      request.callback(accumulated, false);
+    });
+
+    unsubIdle = orchestratorSession!.on("session.idle", () => {
+      // Cleanup happens below after sendAndWait resolves
+    });
+
     const result = await orchestratorSession!.sendAndWait({ prompt: request.prompt }, 300_000);
     const finalContent = result?.data?.content || accumulated || "(No response)";
     logMessage("out", sourceLabel, finalContent);
@@ -229,10 +265,13 @@ async function processQueue(): Promise<void> {
     const msg = err instanceof Error ? err.message : String(err);
 
     if (isConnectionError(err)) {
-      console.error(`[max] Connection error: ${msg}. Attempting reconnect…`);
-      orchestratorSession = undefined;
       const retries = (request.retries ?? 0) + 1;
+      const delay = RECONNECT_DELAYS_MS[Math.min(retries - 1, RECONNECT_DELAYS_MS.length - 1)];
+      console.error(`[max] Connection error: ${msg}. Retry ${retries}/${MAX_RETRIES} after ${delay}ms…`);
+      orchestratorSession = undefined;
+
       if (retries <= MAX_RETRIES) {
+        await sleep(delay);
         const recovered = await reconnectOrchestrator();
         if (recovered) {
           request.retries = retries;
@@ -247,8 +286,8 @@ async function processQueue(): Promise<void> {
       request.callback(`Error: ${msg}`, true);
     }
   } finally {
-    unsubDelta();
-    unsubIdle();
+    unsubDelta?.();
+    unsubIdle?.();
     processing = false;
     processQueue();
   }
