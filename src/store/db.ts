@@ -21,8 +21,25 @@ export function getDb(): Database.Database {
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS max_state (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    `);
   }
   return db;
+}
+
+export function getState(key: string): string | undefined {
+  const db = getDb();
+  const row = db.prepare(`SELECT value FROM max_state WHERE key = ?`).get(key) as { value: string } | undefined;
+  return row?.value;
+}
+
+export function setState(key: string, value: string): void {
+  const db = getDb();
+  db.prepare(`INSERT OR REPLACE INTO max_state (key, value) VALUES (?, ?)`).run(key, value);
 }
 
 export function closeDb(): void {
