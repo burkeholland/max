@@ -145,12 +145,12 @@ export async function initOrchestrator(client: CopilotClient): Promise<void> {
 }
 
 /** Attempt to reconnect the orchestrator session after a failure. */
-async function reconnectOrchestrator(): Promise<boolean> {
+async function reconnectOrchestrator(skipResume = false): Promise<boolean> {
   if (reconnecting) return false;
   reconnecting = true;
 
   try {
-    console.log(`[max] Reconnecting orchestrator…`);
+    console.log(`[max] Reconnecting orchestrator…${skipResume ? " (session expired, creating new)" : ""}`);
 
     // If the client itself is dead, create a brand new one
     if (!copilotClient || copilotClient.getState() !== "connected") {
@@ -166,26 +166,30 @@ async function reconnectOrchestrator(): Promise<boolean> {
     }
 
     const { tools, mcpServers, skillDirectories } = getSessionConfig();
-    const savedSessionId = getState(SESSION_ID_KEY);
 
-    if (savedSessionId) {
-      try {
-        orchestratorSession = await copilotClient.resumeSession(savedSessionId, {
-          streaming: true,
-          tools,
-          mcpServers,
-          skillDirectories,
-          disableResume: true,
-          onPermissionRequest: approveAll,
-        });
-        console.log(`[max] Orchestrator reconnected (resumed ${savedSessionId.slice(0, 8)}…)`);
-        return true;
-      } catch {
-        console.log(`[max] Resume failed, creating new session`);
+    // Try to resume if we have a saved session and it hasn't been reported as gone
+    if (!skipResume) {
+      const savedSessionId = getState(SESSION_ID_KEY);
+      if (savedSessionId) {
+        try {
+          orchestratorSession = await copilotClient.resumeSession(savedSessionId, {
+            streaming: true,
+            tools,
+            mcpServers,
+            skillDirectories,
+            disableResume: true,
+            onPermissionRequest: approveAll,
+          });
+          console.log(`[max] Orchestrator reconnected (resumed ${savedSessionId.slice(0, 8)}…)`);
+          return true;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.log(`[max] Resume failed: ${msg}. Creating new session.`);
+        }
       }
     }
 
-    // Fallback: create new session
+    // Create fresh session
     orchestratorSession = await copilotClient.createSession({
       model: config.copilotModel,
       streaming: true,
@@ -217,9 +221,15 @@ export async function sendToOrchestrator(
   processQueue();
 }
 
-function isConnectionError(err: unknown): boolean {
+function isRecoverableError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
-  return /timeout|disconnect|connection|EPIPE|ECONNRESET|ECONNREFUSED|socket|closed|ENOENT|spawn|kill/i.test(msg);
+  return /timeout|disconnect|connection|EPIPE|ECONNRESET|ECONNREFUSED|socket|closed|ENOENT|spawn|not found|expired|stale/i.test(msg);
+}
+
+/** Check if the error specifically indicates the session no longer exists on the server. */
+function isSessionGone(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /session.*not found|not found.*session|expired|stale/i.test(msg);
 }
 
 async function processQueue(): Promise<void> {
@@ -264,15 +274,16 @@ async function processQueue(): Promise<void> {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
 
-    if (isConnectionError(err)) {
+    if (isRecoverableError(err)) {
+      const sessionGone = isSessionGone(err);
       const retries = (request.retries ?? 0) + 1;
       const delay = RECONNECT_DELAYS_MS[Math.min(retries - 1, RECONNECT_DELAYS_MS.length - 1)];
-      console.error(`[max] Connection error: ${msg}. Retry ${retries}/${MAX_RETRIES} after ${delay}ms…`);
+      console.error(`[max] ${sessionGone ? "Session expired" : "Connection error"}: ${msg}. Retry ${retries}/${MAX_RETRIES} after ${delay}ms…`);
       orchestratorSession = undefined;
 
       if (retries <= MAX_RETRIES) {
         await sleep(delay);
-        const recovered = await reconnectOrchestrator();
+        const recovered = await reconnectOrchestrator(sessionGone);
         if (recovered) {
           request.retries = retries;
           requestQueue.unshift(request);
