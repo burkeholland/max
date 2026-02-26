@@ -113,7 +113,6 @@ export async function initOrchestrator(client: CopilotClient): Promise<void> {
         tools,
         mcpServers,
         skillDirectories,
-        disableResume: true,
         onPermissionRequest: approveAll,
       });
       console.log(`[max] Orchestrator session resumed successfully`);
@@ -145,13 +144,11 @@ export async function initOrchestrator(client: CopilotClient): Promise<void> {
 }
 
 /** Attempt to reconnect the orchestrator session after a failure. */
-async function reconnectOrchestrator(skipResume = false): Promise<boolean> {
+async function reconnectOrchestrator(): Promise<boolean> {
   if (reconnecting) return false;
   reconnecting = true;
 
   try {
-    console.log(`[max] Reconnecting orchestrator…${skipResume ? " (session expired, creating new)" : ""}`);
-
     // If the client itself is dead, create a brand new one
     if (!copilotClient || copilotClient.getState() !== "connected") {
       console.log(`[max] Client not connected (state: ${copilotClient?.getState() ?? "null"}), resetting client…`);
@@ -167,29 +164,28 @@ async function reconnectOrchestrator(skipResume = false): Promise<boolean> {
 
     const { tools, mcpServers, skillDirectories } = getSessionConfig();
 
-    // Try to resume if we have a saved session and it hasn't been reported as gone
-    if (!skipResume) {
-      const savedSessionId = getState(SESSION_ID_KEY);
-      if (savedSessionId) {
-        try {
-          orchestratorSession = await copilotClient.resumeSession(savedSessionId, {
-            streaming: true,
-            tools,
-            mcpServers,
-            skillDirectories,
-            disableResume: true,
-            onPermissionRequest: approveAll,
-          });
-          console.log(`[max] Orchestrator reconnected (resumed ${savedSessionId.slice(0, 8)}…)`);
-          return true;
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.log(`[max] Resume failed: ${msg}. Creating new session.`);
-        }
+    // Always try to resume the saved session first — this reloads it from disk
+    // and preserves conversation history even if the server evicted it from memory.
+    const savedSessionId = getState(SESSION_ID_KEY);
+    if (savedSessionId) {
+      try {
+        console.log(`[max] Resuming session ${savedSessionId.slice(0, 8)}… (preserving memory)`);
+        orchestratorSession = await copilotClient.resumeSession(savedSessionId, {
+          streaming: true,
+          tools,
+          mcpServers,
+          skillDirectories,
+          onPermissionRequest: approveAll,
+        });
+        console.log(`[max] Session resumed — conversation history intact`);
+        return true;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.log(`[max] Resume failed: ${msg}. Session data may be deleted — creating new session.`);
       }
     }
 
-    // Create fresh session
+    // Only create a fresh session if resume is truly impossible (no saved ID or files deleted)
     orchestratorSession = await copilotClient.createSession({
       model: config.copilotModel,
       streaming: true,
@@ -200,7 +196,7 @@ async function reconnectOrchestrator(skipResume = false): Promise<boolean> {
       onPermissionRequest: approveAll,
     });
     setState(SESSION_ID_KEY, orchestratorSession.sessionId);
-    console.log(`[max] Orchestrator reconnected (new session ${orchestratorSession.sessionId.slice(0, 8)}…)`);
+    console.log(`[max] ⚠ New session created (memory reset): ${orchestratorSession.sessionId.slice(0, 8)}…`);
     return true;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -224,12 +220,6 @@ export async function sendToOrchestrator(
 function isRecoverableError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   return /timeout|disconnect|connection|EPIPE|ECONNRESET|ECONNREFUSED|socket|closed|ENOENT|spawn|not found|expired|stale/i.test(msg);
-}
-
-/** Check if the error specifically indicates the session no longer exists on the server. */
-function isSessionGone(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
-  return /session.*not found|not found.*session|expired|stale/i.test(msg);
 }
 
 async function processQueue(): Promise<void> {
@@ -275,15 +265,14 @@ async function processQueue(): Promise<void> {
     const msg = err instanceof Error ? err.message : String(err);
 
     if (isRecoverableError(err)) {
-      const sessionGone = isSessionGone(err);
       const retries = (request.retries ?? 0) + 1;
       const delay = RECONNECT_DELAYS_MS[Math.min(retries - 1, RECONNECT_DELAYS_MS.length - 1)];
-      console.error(`[max] ${sessionGone ? "Session expired" : "Connection error"}: ${msg}. Retry ${retries}/${MAX_RETRIES} after ${delay}ms…`);
+      console.error(`[max] Recoverable error: ${msg}. Retry ${retries}/${MAX_RETRIES} after ${delay}ms…`);
       orchestratorSession = undefined;
 
       if (retries <= MAX_RETRIES) {
         await sleep(delay);
-        const recovered = await reconnectOrchestrator(sessionGone);
+        const recovered = await reconnectOrchestrator();
         if (recovered) {
           request.retries = retries;
           requestQueue.unshift(request);
