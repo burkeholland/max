@@ -1,4 +1,4 @@
-import type { CopilotClient, CopilotSession } from "@github/copilot-sdk";
+import { approveAll, type CopilotClient, type CopilotSession } from "@github/copilot-sdk";
 import { createTools, type WorkerInfo } from "./tools.js";
 import { ORCHESTRATOR_SYSTEM_MESSAGE } from "./system-message.js";
 import { config } from "../config.js";
@@ -89,6 +89,7 @@ export async function initOrchestrator(client: CopilotClient): Promise<void> {
         mcpServers,
         skillDirectories,
         disableResume: true,
+        onPermissionRequest: approveAll,
       });
       console.log(`[max] Orchestrator session resumed successfully`);
       return;
@@ -108,6 +109,7 @@ export async function initOrchestrator(client: CopilotClient): Promise<void> {
     tools,
     mcpServers,
     skillDirectories,
+    onPermissionRequest: approveAll,
   });
 
   // Persist session ID for future reconnection
@@ -140,6 +142,7 @@ async function reconnectOrchestrator(): Promise<boolean> {
           mcpServers,
           skillDirectories,
           disableResume: true,
+          onPermissionRequest: approveAll,
         });
         console.log(`[max] Orchestrator reconnected (resumed ${savedSessionId.slice(0, 8)}…)`);
         return true;
@@ -156,6 +159,7 @@ async function reconnectOrchestrator(): Promise<boolean> {
       tools,
       mcpServers,
       skillDirectories,
+      onPermissionRequest: approveAll,
     });
     setState(SESSION_ID_KEY, orchestratorSession.sessionId);
     console.log(`[max] Orchestrator reconnected (new session ${orchestratorSession.sessionId.slice(0, 8)}…)`);

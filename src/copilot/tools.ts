@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { defineTool, type CopilotClient, type CopilotSession, type Tool } from "@github/copilot-sdk";
+import { approveAll, defineTool, type CopilotClient, type CopilotSession, type Tool } from "@github/copilot-sdk";
 import { getDb } from "../store/db.js";
 import { readdirSync, readFileSync, statSync } from "fs";
 import { join } from "path";
@@ -40,6 +40,7 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
         const session = await deps.client.createSession({
           model: "claude-sonnet-4.5",
           workingDirectory: args.working_dir,
+          onPermissionRequest: approveAll,
         });
 
         const worker: WorkerInfo = {
@@ -265,6 +266,7 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
         try {
           const session = await deps.client.resumeSession(args.session_id, {
             model: "claude-sonnet-4.5",
+            onPermissionRequest: approveAll,
           });
 
           const worker: WorkerInfo = {
