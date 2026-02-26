@@ -232,6 +232,11 @@ async function processQueue(): Promise<void> {
     request.source.type === "tui" ? "tui" : "background";
   logMessage("in", sourceLabel, request.prompt);
 
+  // Tag the prompt with its source channel so the AI knows where the message came from
+  const taggedPrompt = request.source.type === "background"
+    ? request.prompt
+    : `[via ${sourceLabel}] ${request.prompt}`;
+
   if (!orchestratorSession) {
     // Try to reconnect before giving up
     const recovered = await reconnectOrchestrator();
@@ -257,7 +262,7 @@ async function processQueue(): Promise<void> {
       // Cleanup happens below after sendAndWait resolves
     });
 
-    const result = await orchestratorSession!.sendAndWait({ prompt: request.prompt }, 300_000);
+    const result = await orchestratorSession!.sendAndWait({ prompt: taggedPrompt }, 300_000);
     const finalContent = result?.data?.content || accumulated || "(No response)";
     logMessage("out", sourceLabel, finalContent);
     request.callback(finalContent, true);
