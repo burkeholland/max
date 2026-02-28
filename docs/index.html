@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Max — Your AI daemon, built on GitHub Copilot</title>
+  <meta name="description" content="Max is a personal AI daemon built on the GitHub Copilot SDK. He lives on your machine, codes with full Copilot CLI sessions, learns skills, remembers everything, and never sleeps.">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+    :root {
+      --coral: #ff7f50;
+      --azure: #0ea5e9;
+      --sage: #84cc16;
+      --black: #111827;
+      --white: #fafafa;
+      --gray: #4b5563;
+      --mono: 'Space Mono', monospace;
+      --sans: 'Inter', -apple-system, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    ::selection {
+      background: var(--coral);
+      color: var(--black);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--black);
+      color: var(--white);
+      font-family: var(--sans);
+      overflow-x: hidden;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed;
+      top: 0;
+      width: 100%;
+      z-index: 100;
+      padding: 1.5rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      mix-blend-mode: difference;
+    }
+    nav .wordmark {
+      font-family: var(--mono);
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--white);
+      text-decoration: none;
+      letter-spacing: -0.02em;
+    }
+    nav .nav-links {
+      display: flex;
+      gap: 2rem;
+      list-style: none;
+    }
+    nav .nav-links a {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--white);
+      text-decoration: none;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      transition: opacity 0.2s;
+    }
+    nav .nav-links a:hover { opacity: 0.6; }
+    nav .nav-links a.ext::after {
+      content: ' ↗';
+      font-size: 0.65em;
+      opacity: 0.5;
+    }
+
+    /* ── HERO ── */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 8rem 2rem 4rem;
+      position: relative;
+    }
+    .hero-name {
+      font-family: var(--mono);
+      font-size: clamp(6rem, 18vw, 16rem);
+      font-weight: 700;
+      line-height: 0.85;
+      letter-spacing: -0.04em;
+      color: var(--white);
+      position: relative;
+    }
+    .hero-name .dot {
+      color: var(--coral);
+    }
+    .hero-subtitle {
+      font-family: var(--mono);
+      font-size: clamp(1rem, 2vw, 1.4rem);
+      color: var(--gray);
+      margin-top: 2rem;
+      max-width: 50ch;
+      line-height: 1.6;
+    }
+    .hero-subtitle em {
+      font-style: normal;
+      color: var(--azure);
+    }
+    .hero-cta {
+      margin-top: 3rem;
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .hero-cta code {
+      font-family: var(--mono);
+      font-size: 1rem;
+      padding: 1rem 2rem;
+      background: transparent;
+      border: 2px solid var(--white);
+      color: var(--white);
+      cursor: pointer;
+      transition: all 0.15s;
+      display: inline-block;
+    }
+    .hero-cta code:hover {
+      background: var(--white);
+      color: var(--black);
+    }
+    .hero-cta .secondary {
+      border-color: var(--gray);
+      color: var(--gray);
+    }
+    .hero-cta .secondary:hover {
+      border-color: var(--white);
+      background: transparent;
+      color: var(--white);
+    }
+
+    /* floating label */
+    .hero-label {
+      position: absolute;
+      right: 2rem;
+      top: 50%;
+      transform: rotate(90deg) translateX(50%);
+      transform-origin: right center;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--gray);
+    }
+
+    /* ── COLOR BREAK ── */
+    .color-break {
+      display: flex;
+      height: 8px;
+    }
+    .color-break .cb-coral { flex: 3; background: var(--coral); }
+    .color-break .cb-azure { flex: 2; background: var(--azure); }
+    .color-break .cb-sage { flex: 1; background: var(--sage); }
+
+    /* ── WHAT SECTION ── */
+    .what {
+      padding: 8rem 2rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4rem;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .what-left {
+      position: sticky;
+      top: 8rem;
+      align-self: start;
+    }
+    .what-left h2 {
+      font-family: var(--mono);
+      font-size: clamp(2.5rem, 5vw, 4rem);
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -0.03em;
+    }
+    .what-left h2 span { color: var(--sage); }
+    .what-right {
+      display: flex;
+      flex-direction: column;
+      gap: 4rem;
+    }
+    .what-item {
+      border-left: 3px solid var(--gray);
+      padding-left: 2rem;
+      transition: border-color 0.3s;
+    }
+    .what-item:hover { border-color: var(--coral); }
+    .what-item h3 {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: var(--coral);
+      margin-bottom: 0.75rem;
+    }
+    .what-item p {
+      font-size: 1.1rem;
+      line-height: 1.7;
+      color: var(--gray);
+    }
+    .what-item p strong {
+      color: var(--white);
+      font-weight: 600;
+    }
+
+    /* ── CONVERSATION ── */
+    .convo {
+      padding: 8rem 2rem;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .convo-header {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: var(--azure);
+      margin-bottom: 3rem;
+    }
+    .msg {
+      margin-bottom: 2rem;
+      display: flex;
+      gap: 1rem;
+      align-items: flex-start;
+    }
+    .msg-who {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      min-width: 4rem;
+      padding-top: 0.3rem;
+      flex-shrink: 0;
+    }
+    .msg-who.you { color: var(--azure); }
+    .msg-who.max { color: var(--coral); }
+    .msg-who.sys { color: var(--sage); }
+    .msg-text {
+      font-size: 1.1rem;
+      line-height: 1.7;
+      color: var(--gray);
+    }
+    .msg-text strong { color: var(--white); font-weight: 500; }
+    .msg-text code {
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      color: var(--sage);
+    }
+    .msg-gap {
+      border-top: 1px solid #1f2937;
+      margin: 3rem 0;
+    }
+
+    /* ── SKILLS ── */
+    .skills-section {
+      padding: 8rem 2rem;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .skills-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-bottom: 4rem;
+      flex-wrap: wrap;
+      gap: 2rem;
+    }
+    .skills-header h2 {
+      font-family: var(--mono);
+      font-size: clamp(2.5rem, 5vw, 4rem);
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -0.03em;
+    }
+    .skills-header h2 span { color: var(--azure); }
+    .skills-header p {
+      font-size: 1rem;
+      color: var(--gray);
+      max-width: 40ch;
+      text-align: right;
+    }
+    .skills-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 1px;
+      background: #1f2937;
+      border: 1px solid #1f2937;
+    }
+    .skill-cell {
+      background: var(--black);
+      padding: 2rem;
+      transition: background 0.2s;
+    }
+    .skill-cell:hover { background: #1a1f2e; }
+    .skill-cell h3 {
+      font-family: var(--mono);
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+    .skill-cell p {
+      font-size: 0.85rem;
+      color: var(--gray);
+      line-height: 1.5;
+    }
+    .skill-cell .skill-tag {
+      display: inline-block;
+      margin-top: 1rem;
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding: 0.25rem 0.5rem;
+      border: 1px solid #374151;
+    }
+    .skill-cell .skill-tag.built-in { color: var(--sage); border-color: var(--sage); }
+    .skill-cell .skill-tag.community { color: var(--azure); border-color: var(--azure); }
+    .skill-cell .skill-tag.custom { color: var(--coral); border-color: var(--coral); }
+
+    /* ── POWERED BY ── */
+    .powered {
+      padding: 8rem 2rem;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .powered-header {
+      margin-bottom: 4rem;
+    }
+    .powered-header h2 {
+      font-family: var(--mono);
+      font-size: clamp(2.5rem, 5vw, 4rem);
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -0.03em;
+    }
+    .powered-header h2 span { color: var(--coral); }
+    .powered-header p {
+      font-size: 1.1rem;
+      color: var(--gray);
+      max-width: 65ch;
+      line-height: 1.7;
+      margin-top: 1.5rem;
+    }
+    .powered-header p a {
+      color: var(--azure);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.2s;
+    }
+    .powered-header p a:hover { border-color: var(--azure); }
+    .powered-cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2px;
+      background: #1f2937;
+      border: 1px solid #1f2937;
+    }
+    .powered-col {
+      background: var(--black);
+      padding: 3rem;
+    }
+    .powered-col h3 {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      margin-bottom: 1.5rem;
+    }
+    .powered-col:first-child h3 { color: var(--azure); }
+    .powered-col:last-child h3 { color: var(--sage); }
+    .powered-col p {
+      font-size: 1rem;
+      color: var(--gray);
+      line-height: 1.7;
+      margin-bottom: 1rem;
+    }
+    .powered-col p strong { color: var(--white); font-weight: 600; }
+    .powered-col .powered-link {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--white);
+      text-decoration: none;
+      border-bottom: 1px solid var(--gray);
+      transition: border-color 0.2s;
+      display: inline-block;
+      margin-top: 0.5rem;
+    }
+    .powered-col .powered-link:hover { border-color: var(--white); }
+
+    /* ── TOOLS ── */
+    .tools-section {
+      padding: 4rem 2rem 8rem;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .tools-header {
+      margin-bottom: 3rem;
+    }
+    .tools-header h3 {
+      font-family: var(--mono);
+      font-size: clamp(1.5rem, 3vw, 2rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .tools-header h3 span { color: var(--sage); }
+    .tools-header p {
+      font-size: 1rem;
+      color: var(--gray);
+      margin-top: 0.75rem;
+      max-width: 55ch;
+    }
+    .tools-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1px;
+      background: #1f2937;
+      border: 1px solid #1f2937;
+    }
+    .tool-cell {
+      background: var(--black);
+      padding: 2rem;
+      transition: background 0.2s;
+    }
+    .tool-cell:hover { background: #1a1f2e; }
+    .tool-cell h4 {
+      font-family: var(--mono);
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: var(--white);
+    }
+    .tool-cell h4 code {
+      font-weight: 400;
+      font-size: 0.8rem;
+      color: var(--sage);
+    }
+    .tool-cell p {
+      font-size: 0.85rem;
+      color: var(--gray);
+      line-height: 1.5;
+    }
+
+    /* ── INSTALL ── */
+    .install {
+      padding: 8rem 2rem;
+      text-align: center;
+    }
+    .install h2 {
+      font-family: var(--mono);
+      font-size: clamp(2rem, 4vw, 3rem);
+      font-weight: 700;
+      margin-bottom: 3rem;
+      letter-spacing: -0.02em;
+    }
+    .install-block {
+      max-width: 700px;
+      margin: 0 auto;
+      text-align: left;
+      background: #0d1117;
+      border: 1px solid #1f2937;
+      overflow: hidden;
+    }
+    .install-bar {
+      padding: 0.75rem 1rem;
+      background: #161b22;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      border-bottom: 1px solid #1f2937;
+    }
+    .install-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #374151;
+    }
+    .install-bar span {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--gray);
+      margin-left: auto;
+    }
+    .install-body {
+      padding: 2rem;
+    }
+    .install-line {
+      font-family: var(--mono);
+      font-size: clamp(0.8rem, 1.5vw, 1rem);
+      line-height: 2;
+      color: var(--gray);
+    }
+    .install-line .prompt { color: var(--sage); }
+    .install-line .cmd { color: var(--white); }
+    .install-line .comment { color: #374151; }
+    .install-line .url { color: var(--azure); }
+
+    .install-steps {
+      max-width: 700px;
+      margin: 3rem auto 0;
+      display: flex;
+      gap: 0rem;
+    }
+    .install-step {
+      flex: 1;
+      padding: 1.5rem;
+      border-top: 3px solid #1f2937;
+      transition: border-color 0.3s;
+    }
+    .install-step:nth-child(1) { border-color: var(--coral); }
+    .install-step:nth-child(2) { border-color: var(--azure); }
+    .install-step:nth-child(3) { border-color: var(--sage); }
+    .install-step .step-num {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--gray);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .install-step p {
+      font-size: 0.9rem;
+      margin-top: 0.5rem;
+      color: var(--white);
+    }
+    .install-step code {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--gray);
+    }
+
+    /* ── ARCH ── */
+    .arch {
+      padding: 8rem 2rem;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .arch h2 {
+      font-family: var(--mono);
+      font-size: clamp(2rem, 4vw, 3rem);
+      font-weight: 700;
+      margin-bottom: 3rem;
+      letter-spacing: -0.02em;
+    }
+    .arch h2 span { color: var(--sage); }
+    .arch-diagram {
+      font-family: var(--mono);
+      font-size: clamp(0.7rem, 1.2vw, 0.9rem);
+      line-height: 1.8;
+      color: var(--gray);
+      white-space: pre;
+      overflow-x: auto;
+      padding: 2rem 0;
+    }
+    .arch-diagram .hi-coral { color: var(--coral); }
+    .arch-diagram .hi-azure { color: var(--azure); }
+    .arch-diagram .hi-sage { color: var(--sage); }
+    .arch-diagram .hi-white { color: var(--white); }
+
+    /* ── FOOTER ── */
+    footer {
+      padding: 4rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--gray);
+      border-top: 1px solid #1f2937;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    footer a {
+      color: var(--white);
+      text-decoration: none;
+    }
+    footer a:hover { color: var(--coral); }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 768px) {
+      .what {
+        grid-template-columns: 1fr;
+        gap: 3rem;
+      }
+      .what-left {
+        position: static;
+      }
+      .hero-label { display: none; }
+      nav .nav-links { gap: 1rem; }
+      .install-steps { flex-direction: column; }
+      .skills-header { flex-direction: column; align-items: flex-start; }
+      .skills-header p { text-align: left; }
+      .arch-diagram { font-size: 0.6rem; }
+      .msg { flex-direction: column; gap: 0.25rem; }
+      .powered-cols { grid-template-columns: 1fr; }
+    }
+
+    /* ── ANIMATIONS ── */
+    @media (prefers-reduced-motion: no-preference) {
+      .fade-in {
+        opacity: 0;
+        transform: translateY(20px);
+        transition: opacity 0.6s ease, transform 0.6s ease;
+      }
+      .fade-in.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="#" class="wordmark">max</a>
+  <ul class="nav-links">
+    <li><a href="#what">What</a></li>
+    <li><a href="#skills">Skills</a></li>
+    <li><a href="#install">Install</a></li>
+    <li><a href="docs.html">Docs</a></li>
+    <li><a href="https://github.com/burkeholland/max">GitHub</a></li>
+    <li><a href="https://docs.github.com/en/copilot/how-tos/copilot-sdk/sdk-getting-started" class="ext">SDK Docs</a></li>
+  </ul>
+</nav>
+
+<section class="hero">
+  <h1 class="hero-name">max<span class="dot">.</span></h1>
+  <p class="hero-subtitle">
+    A personal developer daemon built on the <em>GitHub Copilot SDK</em>.<br>
+    Full Copilot CLI sessions as workers. Persistent memory.<br>
+    Learns new skills on the fly. Never sleeps.
+  </p>
+  <div class="hero-cta">
+    <code onclick="navigator.clipboard.writeText('curl -fsSL https://raw.githubusercontent.com/burkeholland/max/main/install.sh | bash')">curl -fsSL ...install.sh | bash</code>
+    <code class="secondary" onclick="navigator.clipboard.writeText('npm install -g @burkeholland/max')">npm i -g @burkeholland/max</code>
+  </div>
+  <span class="hero-label">built on github copilot sdk</span>
+</section>
+
+<div class="color-break">
+  <div class="cb-coral"></div>
+  <div class="cb-azure"></div>
+  <div class="cb-sage"></div>
+</div>
+
+<section class="what" id="what">
+  <div class="what-left">
+    <h2>Not a<br>chatbot<span>.</span></h2>
+  </div>
+  <div class="what-right">
+    <div class="what-item fade-in">
+      <h3>Always on</h3>
+      <p><strong>Max runs as a daemon on your machine.</strong> Not a tab you close. Not a chat window. He's a persistent Node.js process powered by the Copilot SDK — running when you're coding, when you're on your phone, when you're asleep.</p>
+    </div>
+    <div class="what-item fade-in">
+      <h3>Real Copilot CLI sessions</h3>
+      <p><strong>Max spins up full Copilot CLI instances as workers.</strong> Need to fix a bug in ~/dev/myapp? Max creates a worker session — a real Copilot CLI with file access, terminal commands, the whole thing — dispatches the task, and notifies you when it's done. Multiple tasks, simultaneously.</p>
+    </div>
+    <div class="what-item fade-in">
+      <h3>Persistent memory</h3>
+      <p><strong>Max remembers everything.</strong> His orchestrator runs in a single infinite session with automatic compaction — the SDK handles context management. Important facts are saved to long-term memory in SQLite. Preferences, project context, people, routines — he never forgets.</p>
+    </div>
+    <div class="what-item fade-in">
+      <h3>Machine awareness</h3>
+      <p><strong>Max can see every Copilot session on your machine</strong> — ones started from VS Code, from the terminal, from anywhere. He can attach to them, check on them, pick up where they left off.</p>
+    </div>
+    <div class="what-item fade-in">
+      <h3>Telegram + Terminal</h3>
+      <p><strong>Talk to Max from your phone or your terminal.</strong> Send a message from Telegram while you're walking your dog. Open a TUI when you're at your desk. Same Max, same memory, everywhere.</p>
+    </div>
+  </div>
+</section>
+
+<div class="color-break">
+  <div class="cb-sage"></div>
+  <div class="cb-coral"></div>
+  <div class="cb-azure"></div>
+</div>
+
+<section class="convo" id="convo">
+  <div class="convo-header">// A conversation with Max</div>
+
+  <div class="msg fade-in"><span class="msg-who you">You</span><span class="msg-text"><strong>Check my email for anything urgent</strong></span></div>
+  <div class="msg fade-in"><span class="msg-who max">Max</span><span class="msg-text">I don't have a skill for email yet. Let me figure it out...</span></div>
+  <div class="msg fade-in"><span class="msg-who sys">Sys</span><span class="msg-text"><code>gog</code> found on system. Researching Gmail commands...</span></div>
+  <div class="msg fade-in"><span class="msg-who max">Max</span><span class="msg-text">Learned a new skill: <strong>Google (gogcli)</strong>. Checking your inbox now.</span></div>
+  <div class="msg fade-in"><span class="msg-who max">Max</span><span class="msg-text">You have <strong>3 unread</strong> — one from your manager about the deploy timeline, one from GitHub (PR approved), and a newsletter. Want me to open any of them?</span></div>
+
+  <div class="msg-gap"></div>
+
+  <div class="msg fade-in"><span class="msg-who you">You</span><span class="msg-text"><strong>Start working on the auth bug in ~/dev/myapp</strong></span></div>
+  <div class="msg fade-in"><span class="msg-who max">Max</span><span class="msg-text">On it — I'll spin up a worker and let you know.</span></div>
+  <div class="msg fade-in"><span class="msg-who you">You</span><span class="msg-text"><strong>What's on my calendar today?</strong></span></div>
+  <div class="msg fade-in"><span class="msg-who max">Max</span><span class="msg-text">You've got standup at 10, a 1:1 with Sarah at 2, and "Focus Time" blocked 3-5pm.</span></div>
+  <div class="msg fade-in"><span class="msg-who sys">Sys</span><span class="msg-text"><code>[background]</code> Worker 'auth-fix' completed. Fixed the token refresh logic — the issue was an expired JWT not triggering re-auth.</span></div>
+  <div class="msg fade-in"><span class="msg-who max">Max</span><span class="msg-text"><strong>Auth bug is fixed.</strong> The token refresh wasn't catching expired JWTs. Want me to push a PR?</span></div>
+</section>
+
+<section class="skills-section" id="skills">
+  <div class="skills-header">
+    <h2>Skills<span>.</span></h2>
+    <p>Max learns by doing. Ask him something new and he'll figure it out, save the skill, and remember forever.</p>
+  </div>
+  <div class="skills-grid">
+    <div class="skill-cell fade-in">
+      <h3>Gmail & Calendar</h3>
+      <p>Read, send, search email. Check calendar, create events, find conflicts.</p>
+      <span class="skill-tag built-in">ships with max</span>
+    </div>
+    <div class="skill-cell fade-in">
+      <h3>Google Drive</h3>
+      <p>List, search, upload, download, share files and folders.</p>
+      <span class="skill-tag built-in">ships with max</span>
+    </div>
+    <div class="skill-cell fade-in">
+      <h3>Smart Home</h3>
+      <p>"Turn off the living room lights." Max finds the CLI tool and learns it.</p>
+      <span class="skill-tag custom">learned on the fly</span>
+    </div>
+    <div class="skill-cell fade-in">
+      <h3>Community Skills</h3>
+      <p>Open source skill library. Say "find me a skill for X" and Max installs it.</p>
+      <span class="skill-tag community">open source</span>
+    </div>
+    <div class="skill-cell fade-in">
+      <h3>Web Search</h3>
+      <p>Search the web, summarize results, pull specific information.</p>
+      <span class="skill-tag custom">learned on the fly</span>
+    </div>
+    <div class="skill-cell fade-in">
+      <h3>Your Thing Here</h3>
+      <p>Just say "learn how to ___" and Max will research it, build a skill, and do it.</p>
+      <span class="skill-tag custom">∞ possibilities</span>
+    </div>
+  </div>
+</section>
+
+<div class="color-break">
+  <div class="cb-azure"></div>
+  <div class="cb-sage"></div>
+  <div class="cb-coral"></div>
+</div>
+
+<section class="arch">
+  <h2>How it works<span>.</span></h2>
+  <div class="arch-diagram"><span class="hi-azure">Telegram</span> ──────┐
+                  │
+                  ▼
+            <span class="hi-white">┌───────────────────────────┐</span>
+            <span class="hi-white">│</span>       <span class="hi-coral">Max Daemon</span>           <span class="hi-white">│</span>
+            <span class="hi-white">│</span>                           <span class="hi-white">│</span>
+            <span class="hi-white">│</span>  <span class="hi-sage">Orchestrator</span>              <span class="hi-white">│</span>
+            <span class="hi-white">│</span>  <span class="hi-sage">Persistent Session</span>        <span class="hi-white">│</span>
+            <span class="hi-white">│</span>  <span class="hi-sage">+ Infinite Memory</span>         <span class="hi-white">│</span>
+            <span class="hi-white">│</span>                           <span class="hi-white">│</span>
+            <span class="hi-white">│</span>  ┌────┐ ┌────┐ ┌────┐    <span class="hi-white">│</span>
+            <span class="hi-white">│</span>  │ <span class="hi-azure">W1</span> │ │ <span class="hi-azure">W2</span> │ │ <span class="hi-azure">WN</span> │    <span class="hi-white">│</span>
+            <span class="hi-white">│</span>  │<span class="hi-azure">CLI</span> │ │<span class="hi-azure">CLI</span> │ │<span class="hi-azure">CLI</span> │    <span class="hi-white">│</span>
+            <span class="hi-white">│</span>  └────┘ └────┘ └────┘    <span class="hi-white">│</span>
+            <span class="hi-white">│</span>                           <span class="hi-white">│</span>
+            <span class="hi-white">│</span>  ┌───────────────────┐    <span class="hi-white">│</span>
+            <span class="hi-white">│</span>  │ <span class="hi-coral">GitHub Copilot SDK</span> │    <span class="hi-white">│</span>
+            <span class="hi-white">│</span>  └───────────────────┘    <span class="hi-white">│</span>
+            <span class="hi-white">└───────────────────────────┘</span>
+                  ▲
+                  │
+<span class="hi-sage">Terminal</span> ─────────┘</div>
+</section>
+
+<div class="color-break">
+  <div class="cb-azure"></div>
+  <div class="cb-coral"></div>
+  <div class="cb-sage"></div>
+</div>
+
+<section class="powered" id="powered">
+  <div class="powered-header">
+    <h2>Built on Copilot<span>.</span></h2>
+    <p>Max isn't a wrapper around an API. He's built directly on the <a href="https://github.com/github/copilot-sdk">GitHub Copilot SDK</a> — the same platform that powers Copilot in VS Code, the terminal, and GitHub.com. Every worker session is a real <a href="https://github.com/features/copilot/cli/">Copilot CLI</a> instance with full access to tools, files, and your terminal.</p>
+  </div>
+  <div class="powered-cols fade-in">
+    <div class="powered-col">
+      <h3>Copilot SDK</h3>
+      <p><strong>Streaming sessions, tool calling, infinite context.</strong> The SDK handles model selection, automatic context compaction, workspace persistence, and permission management. Max uses all of it.</p>
+      <p>Infinite sessions mean Max's conversation never hits a context wall — the SDK compacts intelligently in the background, preserving what matters.</p>
+      <a href="https://docs.github.com/en/copilot/how-tos/copilot-sdk/sdk-getting-started" class="powered-link">SDK documentation ↗</a>
+    </div>
+    <div class="powered-col">
+      <h3>Copilot CLI</h3>
+      <p><strong>Every worker is a full Copilot CLI.</strong> That means real file editing, terminal commands, git operations, code search — the same agent that runs in your terminal, orchestrated by Max.</p>
+      <p>Max can also discover and attach to Copilot sessions started elsewhere — VS Code, your terminal, other tools. One daemon, aware of everything.</p>
+      <a href="https://docs.github.com/en/copilot/how-tos/copilot-cli" class="powered-link">CLI documentation ↗</a>
+    </div>
+  </div>
+</section>
+
+<section class="tools-section">
+  <div class="tools-header">
+    <h3>Built-in tools<span>.</span></h3>
+    <p>Max ships with tools for orchestration, memory, and self-management. No plugins needed.</p>
+  </div>
+  <div class="tools-list">
+    <div class="tool-cell fade-in">
+      <h4>Worker Sessions <code>create_worker</code></h4>
+      <p>Spin up Copilot CLI instances in any directory. Dispatch tasks, run them in parallel, get notified when done.</p>
+    </div>
+    <div class="tool-cell fade-in">
+      <h4>Memory <code>remember</code> <code>recall</code></h4>
+      <p>Persistent long-term memory backed by SQLite. Max saves preferences, facts, project context, and routines automatically.</p>
+    </div>
+    <div class="tool-cell fade-in">
+      <h4>Machine Sessions <code>list_machine</code></h4>
+      <p>Discover every Copilot session on your machine — VS Code, terminal, anywhere. Attach and interact.</p>
+    </div>
+    <div class="tool-cell fade-in">
+      <h4>Skills <code>learn_skill</code></h4>
+      <p>Ask Max to do something new. He researches CLI tools, writes a SKILL.md, and remembers how forever.</p>
+    </div>
+    <div class="tool-cell fade-in">
+      <h4>Model Switching <code>switch_model</code></h4>
+      <p>Switch between any Copilot model by asking. "Use Claude." "Switch to GPT." Persisted across restarts.</p>
+    </div>
+    <div class="tool-cell fade-in">
+      <h4>Self-Management <code>restart_max</code></h4>
+      <p>Max can restart himself. Spawns a replacement process and exits cleanly. Back online in seconds.</p>
+    </div>
+  </div>
+</section>
+
+<div class="color-break">
+  <div class="cb-sage"></div>
+  <div class="cb-azure"></div>
+  <div class="cb-coral"></div>
+</div>
+
+<section class="install" id="install">
+  <h2>Get Max.</h2>
+  <div class="install-block">
+    <div class="install-bar">
+      <div class="install-dot"></div>
+      <div class="install-dot"></div>
+      <div class="install-dot"></div>
+      <span>~</span>
+    </div>
+    <div class="install-body">
+      <div class="install-line"><span class="comment"># one line install</span></div>
+      <div class="install-line"><span class="prompt">$</span> <span class="cmd">curl -fsSL</span> <span class="url">https://raw.githubusercontent.com/burkeholland/max/main/install.sh</span> <span class="cmd">| bash</span></div>
+      <div class="install-line">&nbsp;</div>
+      <div class="install-line"><span class="comment"># or with npm</span></div>
+      <div class="install-line"><span class="prompt">$</span> <span class="cmd">npm install -g @burkeholland/max</span></div>
+    </div>
+  </div>
+  <div class="install-steps">
+    <div class="install-step">
+      <span class="step-num">01</span>
+      <p>Install</p>
+      <code>curl ... | bash</code>
+    </div>
+    <div class="install-step">
+      <span class="step-num">02</span>
+      <p>Setup</p>
+      <code>max setup</code>
+    </div>
+    <div class="install-step">
+      <span class="step-num">03</span>
+      <p>Go</p>
+      <code>max start</code>
+    </div>
+  </div>
+</section>
+
+<div class="color-break">
+  <div class="cb-coral"></div>
+  <div class="cb-azure"></div>
+  <div class="cb-sage"></div>
+</div>
+
+<footer>
+  <span>max v1.0 — built by <a href="https://postrboard.com">burke holland</a></span>
+  <span>
+    <a href="https://github.com/github/copilot-sdk">copilot sdk</a> · 
+    <a href="https://github.com/features/copilot/cli/">copilot cli</a> · 
+    <a href="https://github.com/burkeholland/max">source ↗</a>
+  </span>
+</footer>
+
+<script>
+  // Intersection observer for fade-in animations
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+
+  document.querySelectorAll('.fade-in').forEach((el) => observer.observe(el));
+
+  // Copy to clipboard on CTA click
+  document.querySelectorAll('.hero-cta code').forEach((el) => {
+    el.addEventListener('click', () => {
+      const original = el.textContent;
+      el.textContent = 'copied!';
+      el.style.borderColor = '#84cc16';
+      el.style.color = '#84cc16';
+      setTimeout(() => {
+        el.textContent = original;
+        el.style.borderColor = '';
+        el.style.color = '';
+      }, 1500);
+    });
+  });
+</script>
+
+</body>
+</html>

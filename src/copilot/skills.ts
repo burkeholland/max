@@ -1,16 +1,27 @@
 import { readdirSync, readFileSync, mkdirSync, writeFileSync, existsSync } from "fs";
-import { join, resolve } from "path";
+import { join, dirname } from "path";
 import { homedir } from "os";
+import { fileURLToPath } from "url";
+import { SKILLS_DIR } from "../paths.js";
 
-/** Project-local skills directory (max/skills/) */
-const LOCAL_SKILLS_DIR = resolve(import.meta.dirname, "../../skills");
+/** User-local skills directory (~/.max/skills/) */
+const LOCAL_SKILLS_DIR = SKILLS_DIR;
 
 /** Global shared skills directory */
 const GLOBAL_SKILLS_DIR = join(homedir(), ".agents", "skills");
 
+/** Skills bundled with the Max package (e.g. find-skills) */
+const BUNDLED_SKILLS_DIR = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "skills"
+);
+
 /** Returns all skill directories that exist on disk. */
 export function getSkillDirectories(): string[] {
   const dirs: string[] = [];
+  if (existsSync(BUNDLED_SKILLS_DIR)) dirs.push(BUNDLED_SKILLS_DIR);
   if (existsSync(LOCAL_SKILLS_DIR)) dirs.push(LOCAL_SKILLS_DIR);
   if (existsSync(GLOBAL_SKILLS_DIR)) dirs.push(GLOBAL_SKILLS_DIR);
   return dirs;
@@ -21,7 +32,7 @@ export interface SkillInfo {
   name: string;
   description: string;
   directory: string;
-  source: "local" | "global";
+  source: "bundled" | "local" | "global";
 }
 
 /** Scan all skill directories and return metadata for each skill found. */
@@ -29,6 +40,7 @@ export function listSkills(): SkillInfo[] {
   const skills: SkillInfo[] = [];
 
   for (const [dir, source] of [
+    [BUNDLED_SKILLS_DIR, "bundled"] as const,
     [LOCAL_SKILLS_DIR, "local"] as const,
     [GLOBAL_SKILLS_DIR, "global"] as const,
   ]) {

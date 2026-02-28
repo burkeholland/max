@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Max — Documentation</title>
+  <meta name="description" content="Documentation for Max, a personal AI daemon built on the GitHub Copilot SDK. Installation, configuration, commands, skills, memory, and architecture.">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+    :root {
+      --coral: #ff7f50;
+      --azure: #0ea5e9;
+      --sage: #84cc16;
+      --black: #111827;
+      --black-2: #0d1117;
+      --white: #fafafa;
+      --gray: #4b5563;
+      --gray-border: #1f2937;
+      --mono: 'Space Mono', monospace;
+      --sans: 'Inter', -apple-system, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    ::selection { background: var(--coral); color: var(--black); }
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--black);
+      color: var(--white);
+      font-family: var(--sans);
+      overflow-x: hidden;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed;
+      top: 0;
+      width: 100%;
+      z-index: 100;
+      padding: 1.5rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--black);
+      border-bottom: 1px solid var(--gray-border);
+    }
+    nav .wordmark {
+      font-family: var(--mono);
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--white);
+      text-decoration: none;
+      letter-spacing: -0.02em;
+    }
+    nav .nav-links {
+      display: flex;
+      gap: 2rem;
+      list-style: none;
+    }
+    nav .nav-links a {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--gray);
+      text-decoration: none;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      transition: color 0.2s;
+    }
+    nav .nav-links a:hover,
+    nav .nav-links a.active { color: var(--white); }
+    nav .nav-links a.ext::after {
+      content: ' ↗';
+      font-size: 0.65em;
+      opacity: 0.5;
+    }
+
+    /* ── LAYOUT ── */
+    .docs-layout {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding-top: 5rem;
+      min-height: 100vh;
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      position: sticky;
+      top: 5rem;
+      align-self: start;
+      padding: 2rem 1.5rem;
+      border-right: 1px solid var(--gray-border);
+      height: calc(100vh - 5rem);
+      overflow-y: auto;
+    }
+    .sidebar h4 {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: var(--gray);
+      margin-bottom: 0.75rem;
+      margin-top: 1.5rem;
+    }
+    .sidebar h4:first-child { margin-top: 0; }
+    .sidebar a {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--gray);
+      text-decoration: none;
+      padding: 0.3rem 0;
+      transition: color 0.15s;
+    }
+    .sidebar a:hover { color: var(--white); }
+    .sidebar a.active { color: var(--coral); }
+
+    /* ── CONTENT ── */
+    .docs-content {
+      padding: 3rem 4rem 6rem;
+      max-width: 800px;
+    }
+
+    .docs-content h1 {
+      font-family: var(--mono);
+      font-size: 2.5rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.5rem;
+    }
+    .docs-content h1 span { color: var(--coral); }
+
+    .docs-content .subtitle {
+      font-size: 1.1rem;
+      color: var(--gray);
+      margin-bottom: 3rem;
+      line-height: 1.6;
+    }
+
+    .docs-content h2 {
+      font-family: var(--mono);
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-top: 4rem;
+      margin-bottom: 1.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--gray-border);
+    }
+    .docs-content h2 span { color: var(--azure); }
+    .docs-content h2:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+
+    .docs-content h3 {
+      font-family: var(--mono);
+      font-size: 1rem;
+      font-weight: 700;
+      margin-top: 2.5rem;
+      margin-bottom: 1rem;
+      color: var(--sage);
+    }
+
+    .docs-content p {
+      font-size: 1rem;
+      line-height: 1.8;
+      color: var(--gray);
+      margin-bottom: 1rem;
+    }
+    .docs-content p strong {
+      color: var(--white);
+      font-weight: 600;
+    }
+    .docs-content p a {
+      color: var(--azure);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.2s;
+    }
+    .docs-content p a:hover { border-color: var(--azure); }
+
+    .docs-content ul, .docs-content ol {
+      margin-bottom: 1.5rem;
+      padding-left: 1.5rem;
+    }
+    .docs-content li {
+      font-size: 0.95rem;
+      line-height: 1.7;
+      color: var(--gray);
+      margin-bottom: 0.4rem;
+    }
+    .docs-content li strong { color: var(--white); font-weight: 600; }
+    .docs-content li code {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      color: var(--sage);
+      background: rgba(132, 204, 22, 0.08);
+      padding: 0.15rem 0.4rem;
+      border-radius: 3px;
+    }
+
+    .docs-content code {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      color: var(--sage);
+    }
+
+    /* code blocks */
+    .code-block {
+      background: var(--black-2);
+      border: 1px solid var(--gray-border);
+      overflow-x: auto;
+      margin-bottom: 1.5rem;
+    }
+    .code-bar {
+      padding: 0.5rem 1rem;
+      background: #161b22;
+      border-bottom: 1px solid var(--gray-border);
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--gray);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .code-bar .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #374151;
+      display: inline-block;
+    }
+    .code-bar .label { margin-left: auto; }
+    .code-body {
+      padding: 1.25rem 1.5rem;
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      line-height: 1.8;
+      color: var(--gray);
+      white-space: pre;
+    }
+    .code-body .prompt { color: var(--sage); }
+    .code-body .cmd { color: var(--white); }
+    .code-body .comment { color: #374151; }
+    .code-body .flag { color: var(--azure); }
+    .code-body .str { color: var(--coral); }
+
+    /* command reference table */
+    .cmd-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1.5rem;
+      border: 1px solid var(--gray-border);
+    }
+    .cmd-table th {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      text-align: left;
+      padding: 0.75rem 1rem;
+      background: #161b22;
+      color: var(--gray);
+      border-bottom: 1px solid var(--gray-border);
+    }
+    .cmd-table td {
+      padding: 0.6rem 1rem;
+      font-size: 0.9rem;
+      color: var(--gray);
+      border-bottom: 1px solid var(--gray-border);
+    }
+    .cmd-table td:first-child {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      color: var(--white);
+      white-space: nowrap;
+    }
+    .cmd-table tr:last-child td { border-bottom: none; }
+    .cmd-table .tag {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.15rem 0.4rem;
+      border: 1px solid;
+      border-radius: 2px;
+      white-space: nowrap;
+    }
+    .cmd-table .tag-tui { color: var(--sage); border-color: var(--sage); }
+    .cmd-table .tag-tg { color: var(--azure); border-color: var(--azure); }
+
+    /* callout */
+    .callout {
+      border-left: 3px solid var(--azure);
+      padding: 1rem 1.5rem;
+      margin-bottom: 1.5rem;
+      background: rgba(14, 165, 233, 0.05);
+    }
+    .callout p { margin-bottom: 0; }
+    .callout.warn { border-color: var(--coral); background: rgba(255, 127, 80, 0.05); }
+
+    /* env var table */
+    .env-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1.5rem;
+      border: 1px solid var(--gray-border);
+    }
+    .env-table th {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      text-align: left;
+      padding: 0.75rem 1rem;
+      background: #161b22;
+      color: var(--gray);
+      border-bottom: 1px solid var(--gray-border);
+    }
+    .env-table td {
+      padding: 0.6rem 1rem;
+      font-size: 0.9rem;
+      color: var(--gray);
+      border-bottom: 1px solid var(--gray-border);
+      vertical-align: top;
+    }
+    .env-table td:first-child {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--sage);
+      white-space: nowrap;
+    }
+    .env-table tr:last-child td { border-bottom: none; }
+
+    /* ── COLOR BREAK ── */
+    .color-break {
+      display: flex;
+      height: 8px;
+    }
+    .color-break .cb-coral { flex: 3; background: var(--coral); }
+    .color-break .cb-azure { flex: 2; background: var(--azure); }
+    .color-break .cb-sage { flex: 1; background: var(--sage); }
+
+    /* ── FOOTER ── */
+    footer {
+      padding: 4rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--gray);
+      border-top: 1px solid var(--gray-border);
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    footer a {
+      color: var(--white);
+      text-decoration: none;
+    }
+    footer a:hover { color: var(--coral); }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 768px) {
+      .docs-layout {
+        grid-template-columns: 1fr;
+      }
+      .sidebar {
+        position: static;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--gray-border);
+        padding: 1.5rem 2rem;
+      }
+      .docs-content {
+        padding: 2rem;
+      }
+      nav .nav-links { gap: 1rem; }
+      .cmd-table, .env-table { font-size: 0.8rem; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="index.html" class="wordmark">max</a>
+  <ul class="nav-links">
+    <li><a href="index.html">Home</a></li>
+    <li><a href="docs.html" class="active">Docs</a></li>
+    <li><a href="https://github.com/burkeholland/max">GitHub</a></li>
+    <li><a href="https://docs.github.com/en/copilot/how-tos/copilot-sdk/sdk-getting-started" class="ext">SDK Docs</a></li>
+  </ul>
+</nav>
+
+<div class="docs-layout">
+
+<aside class="sidebar">
+  <h4>Getting Started</h4>
+  <a href="#installation">Installation</a>
+  <a href="#setup">Setup</a>
+  <a href="#running">Running Max</a>
+
+  <h4>Using Max</h4>
+  <a href="#commands">Commands</a>
+  <a href="#talking">Talking to Max</a>
+  <a href="#workers">Worker Sessions</a>
+
+  <h4>Features</h4>
+  <a href="#skills">Skills</a>
+  <a href="#memory">Memory</a>
+  <a href="#models">Models</a>
+
+  <h4>Configuration</h4>
+  <a href="#config">Environment Variables</a>
+  <a href="#telegram">Telegram Setup</a>
+
+  <h4>Architecture</h4>
+  <a href="#how-it-works">How It Works</a>
+  <a href="#copilot-sdk">Copilot SDK</a>
+</aside>
+
+<main class="docs-content">
+
+<h1>Documentation<span>.</span></h1>
+<p class="subtitle">Everything you need to get Max running, configured, and doing useful things.</p>
+
+<!-- ─────────────────── GETTING STARTED ─────────────────── -->
+
+<h2 id="installation">Installation<span>.</span></h2>
+
+<h3>Prerequisites</h3>
+<ul>
+  <li><strong>Node.js v18+</strong> — <code>node --version</code></li>
+  <li><strong>npm</strong> — comes with Node.js</li>
+  <li><strong>GitHub Copilot CLI</strong> — Max uses the Copilot SDK which requires an active Copilot subscription. Install with <code>npm install -g @anthropic-ai/copilot</code></li>
+  <li><strong>gogcli</strong> (optional) — enables Gmail, Calendar, Drive skills. <code>brew install gogcli</code></li>
+</ul>
+
+<h3>One-line install</h3>
+<div class="code-block">
+  <div class="code-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="label">terminal</span></div>
+  <div class="code-body"><span class="prompt">$</span> <span class="cmd">curl -fsSL https://raw.githubusercontent.com/burkeholland/max/main/install.sh | bash</span></div>
+</div>
+
+<h3>Or install with npm</h3>
+<div class="code-block">
+  <div class="code-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="label">terminal</span></div>
+  <div class="code-body"><span class="prompt">$</span> <span class="cmd">npm install -g @burkeholland/max</span></div>
+</div>
+
+
+<h2 id="setup">Setup<span>.</span></h2>
+
+<p>After installing, run the interactive setup wizard:</p>
+
+<div class="code-block">
+  <div class="code-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="label">terminal</span></div>
+  <div class="code-body"><span class="prompt">$</span> <span class="cmd">max setup</span></div>
+</div>
+
+<p>The wizard walks you through:</p>
+<ol>
+  <li><strong>Model selection</strong> — pick your default Copilot model (you can switch anytime later)</li>
+  <li><strong>Telegram setup</strong> (optional) — create a bot via <a href="https://t.me/BotFather">@BotFather</a>, lock it down to your user ID, and configure it</li>
+</ol>
+
+<div class="callout">
+  <p><strong>Telegram lockdown is required.</strong> If you choose to set up Telegram, Max will not proceed until you provide your user ID. This prevents unauthorized access to your machine through the bot.</p>
+</div>
+
+<p>Configuration is saved to <code>~/.max/.env</code>. You can re-run <code>max setup</code> anytime to reconfigure.</p>
+
+
+<h2 id="running">Running Max<span>.</span></h2>
+
+<table class="cmd-table">
+  <thead><tr><th>Command</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>max start</td><td>Start the Max daemon. Launches the orchestrator, HTTP API (port 7777), and Telegram bot (if configured).</td></tr>
+    <tr><td>max tui</td><td>Open the terminal UI. Connects to the running daemon via SSE for real-time streaming.</td></tr>
+    <tr><td>max setup</td><td>Run the interactive setup wizard.</td></tr>
+    <tr><td>max help</td><td>Show available commands.</td></tr>
+    <tr><td>max --version</td><td>Print the version number.</td></tr>
+  </tbody>
+</table>
+
+<p><strong>Typical workflow:</strong> Start the daemon in one terminal with <code>max start</code>, then open a second terminal and run <code>max tui</code> to chat. Or just message Max on Telegram from your phone.</p>
+
+
+<!-- ─────────────────── USING MAX ─────────────────── -->
+
+<h2 id="commands">Commands<span>.</span></h2>
+
+<p>Slash commands work in both the TUI and Telegram. They're instant — they don't go through the AI, so they're great for quick actions.</p>
+
+<table class="cmd-table">
+  <thead><tr><th>Command</th><th>Description</th><th>Where</th></tr></thead>
+  <tbody>
+    <tr><td>/cancel</td><td>Cancel the in-flight message</td><td><span class="tag tag-tui">TUI</span> <span class="tag tag-tg">TG</span></td></tr>
+    <tr><td>/model</td><td>Show the current model</td><td><span class="tag tag-tui">TUI</span> <span class="tag tag-tg">TG</span></td></tr>
+    <tr><td>/model &lt;name&gt;</td><td>Switch to a different model</td><td><span class="tag tag-tui">TUI</span> <span class="tag tag-tg">TG</span></td></tr>
+    <tr><td>/memory</td><td>Show all stored memories</td><td><span class="tag tag-tui">TUI</span> <span class="tag tag-tg">TG</span></td></tr>
+    <tr><td>/skills</td><td>List installed skills</td><td><span class="tag tag-tui">TUI</span> <span class="tag tag-tg">TG</span></td></tr>
+    <tr><td>/workers</td><td>List active worker sessions</td><td><span class="tag tag-tui">TUI</span> <span class="tag tag-tg">TG</span></td></tr>
+    <tr><td>/restart</td><td>Restart the Max daemon</td><td><span class="tag tag-tui">TUI</span> <span class="tag tag-tg">TG</span></td></tr>
+    <tr><td>/status</td><td>Daemon health check</td><td><span class="tag tag-tui">TUI</span></td></tr>
+    <tr><td>/clear</td><td>Clear the terminal screen</td><td><span class="tag tag-tui">TUI</span></td></tr>
+    <tr><td>/quit</td><td>Exit the TUI</td><td><span class="tag tag-tui">TUI</span></td></tr>
+    <tr><td>/help</td><td>Show command help</td><td><span class="tag tag-tui">TUI</span> <span class="tag tag-tg">TG</span></td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <p><strong>Tip:</strong> In the TUI, press <strong>Escape</strong> to cancel a running message — no need to type <code>/cancel</code>.</p>
+</div>
+
+
+<h2 id="talking">Talking to Max<span>.</span></h2>
+
+<p>Anything that isn't a slash command gets sent to Max as a natural language message. Max decides how to handle it:</p>
+
+<ul>
+  <li><strong>Direct answer</strong> — simple questions, math, general knowledge</li>
+  <li><strong>Worker session</strong> — coding tasks, file operations, debugging (Max spins up a Copilot CLI)</li>
+  <li><strong>Skill usage</strong> — if Max has a skill for it (email, calendar, etc.), he follows the skill's instructions</li>
+  <li><strong>Skill learning</strong> — if Max doesn't know how, he researches available CLI tools and teaches himself</li>
+</ul>
+
+<p>Messages are tagged with their source channel — <code>[via telegram]</code> or <code>[via tui]</code> — so Max can adapt his response style. Telegram gets shorter responses; TUI gets more detail.</p>
+
+
+<h2 id="workers">Worker Sessions<span>.</span></h2>
+
+<p>Workers are the backbone of Max's coding ability. Each worker is a <strong>full Copilot CLI session</strong> running in a specific directory with full access to files, terminal, git, and tools.</p>
+
+<ul>
+  <li>Workers run <strong>in the background</strong> — Max dispatches the task and returns immediately</li>
+  <li>When a worker finishes, Max receives the result and relays it to you</li>
+  <li>Multiple workers can run <strong>simultaneously</strong></li>
+  <li>You can check on workers with <code>/workers</code> or ask Max "what's the status of the auth-fix session?"</li>
+</ul>
+
+<p>You don't need to manage workers directly — just tell Max what you need done and where, and he handles the rest.</p>
+
+<div class="code-block">
+  <div class="code-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="label">conversation</span></div>
+  <div class="code-body"><span class="str">You:</span>  Fix the auth bug in ~/dev/myapp
+<span class="flag">Max:</span>  On it — I'll spin up a worker and let you know.
+
+<span class="comment">  ...a few minutes later...</span>
+
+<span class="flag">Max:</span>  Auth bug is fixed. The token refresh wasn't catching
+      expired JWTs. Want me to push a PR?</div>
+</div>
+
+
+<!-- ─────────────────── FEATURES ─────────────────── -->
+
+<h2 id="skills">Skills<span>.</span></h2>
+
+<p>Skills are markdown instruction files (<code>SKILL.md</code>) that teach Max how to use external tools. They're stored in <code>~/.max/skills/</code>.</p>
+
+<h3>Using skills</h3>
+<p>Just ask Max to do something. If he has a skill for it, he'll use it automatically. Ask <em>"what skills do you have?"</em> or use <code>/skills</code> to see what's available.</p>
+
+<h3>Learning new skills</h3>
+<p>When you ask Max to do something he doesn't know how to do, he'll:</p>
+<ol>
+  <li>Spin up a worker to research what CLI tools are available on your machine</li>
+  <li>Figure out how to accomplish the task</li>
+  <li>Save the instructions as a SKILL.md so he remembers for next time</li>
+  <li>Do the task</li>
+</ol>
+
+<p>You can also explicitly teach Max: <em>"Learn how to use kubectl"</em> and he'll research it and create a skill.</p>
+
+<h3>Community skills</h3>
+<p>Max can discover and install skills from the open source community skill library. Just say <em>"find me a skill for X"</em>.</p>
+
+<h3>Bundled skills</h3>
+<p>Max ships with the <strong>gogcli</strong> skill for Google services (Gmail, Calendar, Drive, Contacts, Tasks, Sheets) — requires <code>gogcli</code> to be installed.</p>
+
+
+<h2 id="memory">Memory<span>.</span></h2>
+
+<p>Max has a three-layer memory system:</p>
+
+<h3>Layer 1: Persistent session</h3>
+<p>Max maintains a single long-running orchestrator session using the Copilot SDK's <strong>infinite sessions</strong>. The SDK automatically compacts context in the background when it fills up, preserving important information. This means Max naturally remembers your conversation across messages — no manual history injection needed.</p>
+
+<h3>Layer 2: Long-term memory (SQLite)</h3>
+<p>For facts that should survive even a full session reset, Max has a <code>memories</code> table in SQLite. Things like your preferences, project context, people you work with, and routines. These are injected into Max's system prompt so he always has access.</p>
+
+<p>Max saves memories two ways:</p>
+<ul>
+  <li><strong>Explicitly</strong> — when you say "remember that I prefer TypeScript" or "remember that Sarah is my manager"</li>
+  <li><strong>Proactively</strong> — Max automatically saves important facts he picks up in conversation</li>
+</ul>
+
+<p>Memory categories: <code>preference</code>, <code>fact</code>, <code>project</code>, <code>person</code>, <code>routine</code></p>
+
+<p>Use <code>/memory</code> to see everything Max has remembered. Ask Max to <em>"forget #42"</em> to remove a specific memory.</p>
+
+<h3>Layer 3: Conversation log</h3>
+<p>All messages are logged to SQLite with their source channel (Telegram, TUI, background). This provides cross-channel awareness — if you tell Max something on Telegram, the TUI session knows about it too.</p>
+
+
+<h2 id="models">Models<span>.</span></h2>
+
+<p>Max can use any model available through your Copilot subscription. Switch models in two ways:</p>
+
+<ul>
+  <li><strong>Slash command:</strong> <code>/model claude-sonnet-4.5</code></li>
+  <li><strong>Natural language:</strong> "Switch to GPT-4.1" — Max will use the <code>switch_model</code> tool</li>
+</ul>
+
+<p>Ask Max <em>"what models are available?"</em> to see the full list with billing multipliers. The model choice persists across restarts.</p>
+
+<p>Default model: <code>claude-sonnet-4.5</code></p>
+
+
+<!-- ─────────────────── CONFIGURATION ─────────────────── -->
+
+<h2 id="config">Environment Variables<span>.</span></h2>
+
+<p>Configuration lives in <code>~/.max/.env</code>. You can edit it directly or use <code>max setup</code>.</p>
+
+<table class="env-table">
+  <thead><tr><th>Variable</th><th>Default</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>COPILOT_MODEL</td><td>claude-sonnet-4.5</td><td>Default LLM model for the orchestrator</td></tr>
+    <tr><td>API_PORT</td><td>7777</td><td>HTTP API port (1–65535)</td></tr>
+    <tr><td>TELEGRAM_BOT_TOKEN</td><td>—</td><td>Bot token from @BotFather (optional)</td></tr>
+    <tr><td>AUTHORIZED_USER_ID</td><td>—</td><td>Your Telegram numeric user ID (required if using Telegram)</td></tr>
+  </tbody>
+</table>
+
+
+<h2 id="telegram">Telegram Setup<span>.</span></h2>
+
+<p>Telegram is optional but lets you talk to Max from your phone anywhere.</p>
+
+<ol>
+  <li>Open <a href="https://t.me/BotFather">@BotFather</a> on Telegram and send <code>/newbot</code></li>
+  <li>Choose a name and username for your bot</li>
+  <li>Copy the bot token</li>
+  <li>Get your user ID from <a href="https://t.me/userinfobot">@userinfobot</a> — send it any message and it replies with your ID</li>
+  <li>Run <code>max setup</code> and enter both values when prompted</li>
+</ol>
+
+<div class="callout warn">
+  <p><strong>Security:</strong> The <code>AUTHORIZED_USER_ID</code> is mandatory. Without it, anyone who finds your bot could control your machine. Max silently ignores messages from unauthorized users.</p>
+</div>
+
+<p>We also recommend disabling group joins: in @BotFather, go to <code>/mybots</code> → your bot → Bot Settings → Allow Groups → disable.</p>
+
+
+<!-- ─────────────────── ARCHITECTURE ─────────────────── -->
+
+<h2 id="how-it-works">How It Works<span>.</span></h2>
+
+<p>Max is a Node.js daemon process built on the <a href="https://github.com/github/copilot-sdk">GitHub Copilot SDK</a>. Here's the architecture:</p>
+
+<ul>
+  <li><strong>Daemon</strong> (<code>max start</code>) — the main process. Starts the SDK client, orchestrator, HTTP API, and Telegram bot.</li>
+  <li><strong>Orchestrator</strong> — a persistent Copilot session that receives all messages, decides what to do, and dispatches work. Runs in a single infinite session with automatic compaction.</li>
+  <li><strong>Workers</strong> — full Copilot CLI sessions created on demand for coding tasks. Each runs in its own directory with full tool access.</li>
+  <li><strong>HTTP API</strong> — Express server on port 7777. The TUI connects via SSE for streaming; slash commands hit REST endpoints.</li>
+  <li><strong>TUI</strong> (<code>max tui</code>) — a readline-based terminal interface that connects to the daemon's SSE stream.</li>
+  <li><strong>Telegram Bot</strong> — Grammy-based bot that forwards messages to the orchestrator and relays responses.</li>
+  <li><strong>SQLite</strong> — stores worker state, conversation log, long-term memories, and daemon state at <code>~/.max/max.db</code>.</li>
+</ul>
+
+<p>All data lives in <code>~/.max/</code>:</p>
+<div class="code-block">
+  <div class="code-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="label">~/.max/</span></div>
+  <div class="code-body"><span class="cmd">.env</span>          <span class="comment"># configuration</span>
+<span class="cmd">max.db</span>        <span class="comment"># SQLite database</span>
+<span class="cmd">sessions/</span>     <span class="comment"># Copilot SDK session state</span>
+<span class="cmd">skills/</span>       <span class="comment"># learned skills (SKILL.md files)</span></div>
+</div>
+
+
+<h2 id="copilot-sdk">Copilot SDK<span>.</span></h2>
+
+<p>Max is built on the <a href="https://github.com/github/copilot-sdk">GitHub Copilot SDK</a> (<code>@github/copilot-sdk</code>). Key SDK features Max uses:</p>
+
+<ul>
+  <li><strong>Infinite sessions</strong> — automatic context compaction at 80% utilization, blocking at 95%. Max's orchestrator runs in a single persistent session that never runs out of context.</li>
+  <li><strong>Session resume</strong> — <code>resumeSession()</code> lets Max pick up where he left off after a restart, preserving conversation history.</li>
+  <li><strong>Tool system</strong> — Max's built-in tools (remember, recall, workers, model switching, etc.) are defined via <code>defineTool()</code> with Zod schemas.</li>
+  <li><strong>Streaming</strong> — real-time response streaming via <code>assistant.message_delta</code> events.</li>
+  <li><strong>MCP servers</strong> — Max can connect to MCP tool servers for extended capabilities.</li>
+  <li><strong>Skill directories</strong> — the SDK discovers and loads SKILL.md files from configured directories.</li>
+  <li><strong>Model listing</strong> — <code>client.listModels()</code> returns all available models with capabilities and billing info.</li>
+</ul>
+
+<p>For more on the SDK: <a href="https://docs.github.com/en/copilot/how-tos/copilot-sdk/sdk-getting-started">Getting Started</a> · <a href="https://github.com/github/copilot-sdk">GitHub Repository</a></p>
+
+<p>For more on Copilot CLI: <a href="https://docs.github.com/en/copilot/how-tos/copilot-cli">Documentation</a> · <a href="https://github.com/features/copilot/cli/">Features</a></p>
+
+</main>
+</div>
+
+<div class="color-break">
+  <div class="cb-coral"></div>
+  <div class="cb-azure"></div>
+  <div class="cb-sage"></div>
+</div>
+
+<footer>
+  <span>max v1.0 — built by <a href="https://postrboard.com">burke holland</a></span>
+  <span>
+    <a href="https://github.com/github/copilot-sdk">copilot sdk</a> · 
+    <a href="https://github.com/features/copilot/cli/">copilot cli</a> · 
+    <a href="https://github.com/burkeholland/max">source ↗</a>
+  </span>
+</footer>
+
+<script>
+  // Highlight active sidebar link on scroll
+  const sections = document.querySelectorAll('h2[id], h3[id]');
+  const sidebarLinks = document.querySelectorAll('.sidebar a');
+
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) {
+        sidebarLinks.forEach((a) => a.classList.remove('active'));
+        const active = document.querySelector(`.sidebar a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    }
+  }, { rootMargin: '-80px 0px -70% 0px' });
+
+  sections.forEach((s) => observer.observe(s));
+</script>
+
+</body>
+</html>

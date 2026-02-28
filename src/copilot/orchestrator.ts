@@ -5,11 +5,14 @@ import { config } from "../config.js";
 import { loadMcpConfig } from "./mcp-config.js";
 import { getSkillDirectories } from "./skills.js";
 import { resetClient } from "./client.js";
-import { logConversation, getRecentConversation } from "../store/db.js";
+import { logConversation, getState, setState, getMemorySummary } from "../store/db.js";
+import { SESSIONS_DIR } from "../paths.js";
 
 const MAX_RETRIES = 3;
 const RECONNECT_DELAYS_MS = [1_000, 3_000, 10_000];
 const HEALTH_CHECK_INTERVAL_MS = 30_000;
+
+const ORCHESTRATOR_SESSION_KEY = "orchestrator_session_id";
 
 export type MessageSource =
   | { type: "telegram"; chatId: number; messageId: number }
@@ -25,8 +28,8 @@ export function setMessageLogger(fn: LogFn): void {
   logMessage = fn;
 }
 
-// Proactive notification — sends unsolicited messages to the user
-type ProactiveNotifyFn = (text: string) => void;
+// Proactive notification — sends unsolicited messages to the user on a specific channel
+type ProactiveNotifyFn = (text: string, channel?: "telegram" | "tui") => void;
 let proactiveNotifyFn: ProactiveNotifyFn | undefined;
 
 export function setProactiveNotify(fn: ProactiveNotifyFn): void {
@@ -36,6 +39,28 @@ export function setProactiveNotify(fn: ProactiveNotifyFn): void {
 let copilotClient: CopilotClient | undefined;
 const workers = new Map<string, WorkerInfo>();
 let healthCheckTimer: ReturnType<typeof setInterval> | undefined;
+
+// Persistent orchestrator session
+let orchestratorSession: CopilotSession | undefined;
+
+// Message queue — serializes access to the single persistent session
+type QueuedMessage = {
+  prompt: string;
+  callback: MessageCallback;
+  sourceChannel?: "telegram" | "tui";
+  resolve: (value: string) => void;
+  reject: (err: unknown) => void;
+};
+const messageQueue: QueuedMessage[] = [];
+let processing = false;
+let currentCallback: MessageCallback | undefined;
+/** The channel currently being processed — tools use this to tag new workers. */
+let currentSourceChannel: "telegram" | "tui" | undefined;
+
+/** Get the channel that originated the message currently being processed. */
+export function getCurrentSourceChannel(): "telegram" | "tui" | undefined {
+  return currentSourceChannel;
+}
 
 function getSessionConfig() {
   const tools = createTools({
@@ -50,13 +75,15 @@ function getSessionConfig() {
 
 /** Feed a background worker result into the orchestrator as a new turn. */
 export function feedBackgroundResult(workerName: string, result: string): void {
+  const worker = workers.get(workerName);
+  const channel = worker?.originChannel;
   const prompt = `[Background task completed] Worker '${workerName}' finished:\n\n${result}`;
   sendToOrchestrator(
     prompt,
     { type: "background" },
     (_text, done) => {
       if (done && proactiveNotifyFn) {
-        proactiveNotifyFn(_text);
+        proactiveNotifyFn(_text, channel);
       }
     }
   );
@@ -93,11 +120,66 @@ function startHealthCheck(): void {
       if (state !== "connected") {
         console.log(`[max] Health check: client state is '${state}', resetting…`);
         await ensureClient();
+        // Session may need recovery after client reset
+        orchestratorSession = undefined;
       }
     } catch (err) {
       console.error(`[max] Health check error:`, err instanceof Error ? err.message : err);
     }
   }, HEALTH_CHECK_INTERVAL_MS);
+}
+
+/** Create or resume the persistent orchestrator session. */
+async function ensureOrchestratorSession(): Promise<CopilotSession> {
+  if (orchestratorSession) return orchestratorSession;
+
+  const client = await ensureClient();
+  const { tools, mcpServers, skillDirectories } = getSessionConfig();
+  const memorySummary = getMemorySummary();
+
+  // Try to resume a previous session
+  const savedSessionId = getState(ORCHESTRATOR_SESSION_KEY);
+  if (savedSessionId) {
+    try {
+      console.log(`[max] Resuming orchestrator session ${savedSessionId.slice(0, 8)}…`);
+      orchestratorSession = await client.resumeSession(savedSessionId, {
+        model: config.copilotModel,
+        configDir: SESSIONS_DIR,
+        streaming: true,
+        systemMessage: {
+          content: getOrchestratorSystemMessage(memorySummary || undefined),
+        },
+        tools,
+        mcpServers,
+        skillDirectories,
+        onPermissionRequest: approveAll,
+      });
+      console.log(`[max] Resumed orchestrator session successfully`);
+      return orchestratorSession;
+    } catch (err) {
+      console.log(`[max] Could not resume session: ${err instanceof Error ? err.message : err}. Creating new.`);
+    }
+  }
+
+  // Create a fresh session
+  console.log(`[max] Creating new persistent orchestrator session`);
+  orchestratorSession = await client.createSession({
+    model: config.copilotModel,
+    configDir: SESSIONS_DIR,
+    streaming: true,
+    systemMessage: {
+      content: getOrchestratorSystemMessage(memorySummary || undefined),
+    },
+    tools,
+    mcpServers,
+    skillDirectories,
+    onPermissionRequest: approveAll,
+  });
+
+  // Persist the session ID for future restarts
+  setState(ORCHESTRATOR_SESSION_KEY, orchestratorSession.sessionId);
+  console.log(`[max] Created orchestrator session ${orchestratorSession.sessionId.slice(0, 8)}…`);
+  return orchestratorSession;
 }
 
 export async function initOrchestrator(client: CopilotClient): Promise<void> {
@@ -106,29 +188,21 @@ export async function initOrchestrator(client: CopilotClient): Promise<void> {
 
   console.log(`[max] Loading ${Object.keys(mcpServers).length} MCP server(s): ${Object.keys(mcpServers).join(", ") || "(none)"}`);
   console.log(`[max] Skill directories: ${skillDirectories.join(", ") || "(none)"}`);
-  console.log(`[max] Per-message session mode — each message gets its own session`);
+  console.log(`[max] Persistent session mode — conversation history maintained by SDK`);
   startHealthCheck();
+
+  // Eagerly create/resume the orchestrator session
+  try {
+    await ensureOrchestratorSession();
+  } catch (err) {
+    console.error(`[max] Failed to create initial session (will retry on first message):`, err instanceof Error ? err.message : err);
+  }
 }
 
-/** Create an ephemeral session, send a prompt, return the response. */
-async function executeInSession(prompt: string, callback: MessageCallback): Promise<string> {
-  const client = await ensureClient();
-  const { tools, mcpServers, skillDirectories } = getSessionConfig();
-
-  // Inject recent conversation history as context
-  const recentConversation = getRecentConversation();
-
-  const session: CopilotSession = await client.createSession({
-    model: config.copilotModel,
-    streaming: true,
-    systemMessage: {
-      content: getOrchestratorSystemMessage(recentConversation || undefined),
-    },
-    tools,
-    mcpServers,
-    skillDirectories,
-    onPermissionRequest: approveAll,
-  });
+/** Send a prompt on the persistent session, return the response. */
+async function executeOnSession(prompt: string, callback: MessageCallback): Promise<string> {
+  const session = await ensureOrchestratorSession();
+  currentCallback = callback;
 
   let accumulated = "";
   const unsubDelta = session.on("assistant.message_delta", (event) => {
@@ -140,11 +214,38 @@ async function executeInSession(prompt: string, callback: MessageCallback): Prom
     const result = await session.sendAndWait({ prompt }, 300_000);
     const finalContent = result?.data?.content || accumulated || "(No response)";
     return finalContent;
+  } catch (err) {
+    // If the session is broken, invalidate it so it's recreated on next attempt
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/closed|destroy|disposed|invalid|expired/i.test(msg)) {
+      console.log(`[max] Session appears dead, will recreate: ${msg}`);
+      orchestratorSession = undefined;
+    }
+    throw err;
   } finally {
     unsubDelta();
-    // Best-effort cleanup — don't block on it
-    session.destroy().catch(() => {});
+    currentCallback = undefined;
   }
+}
+
+/** Process the message queue one at a time. */
+async function processQueue(): Promise<void> {
+  if (processing) return;
+  processing = true;
+
+  while (messageQueue.length > 0) {
+    const item = messageQueue.shift()!;
+    currentSourceChannel = item.sourceChannel;
+    try {
+      const result = await executeOnSession(item.prompt, item.callback);
+      item.resolve(result);
+    } catch (err) {
+      item.reject(err);
+    }
+    currentSourceChannel = undefined;
+  }
+
+  processing = false;
 }
 
 function isRecoverableError(err: unknown): boolean {
@@ -170,20 +271,33 @@ export async function sendToOrchestrator(
   // Log role: background events are "system", user messages are "user"
   const logRole = source.type === "background" ? "system" : "user";
 
-  // Fire-and-forget — runs concurrently with other messages
+  // Determine the source channel for worker origin tracking
+  const sourceChannel: "telegram" | "tui" | undefined =
+    source.type === "telegram" ? "telegram" :
+    source.type === "tui" ? "tui" : undefined;
+
+  // Enqueue and process
   void (async () => {
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const finalContent = await executeInSession(taggedPrompt, callback);
+        const finalContent = await new Promise<string>((resolve, reject) => {
+          messageQueue.push({ prompt: taggedPrompt, callback, sourceChannel, resolve, reject });
+          processQueue();
+        });
         // Deliver response to user FIRST, then log best-effort
         callback(finalContent, true);
         try { logMessage("out", sourceLabel, finalContent); } catch { /* best-effort */ }
-        // Log both sides of the conversation after delivery (avoids duplicate context)
+        // Log both sides of the conversation after delivery
         try { logConversation(logRole, prompt, sourceLabel); } catch { /* best-effort */ }
         try { logConversation("assistant", finalContent, sourceLabel); } catch { /* best-effort */ }
         return;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+
+        // Don't retry cancelled messages
+        if (/cancelled|abort/i.test(msg)) {
+          return;
+        }
 
         if (isRecoverableError(err) && attempt < MAX_RETRIES) {
           const delay = RECONNECT_DELAYS_MS[Math.min(attempt, RECONNECT_DELAYS_MS.length - 1)];
@@ -200,6 +314,29 @@ export async function sendToOrchestrator(
       }
     }
   })();
+}
+
+/** Cancel the in-flight message and drain the queue. */
+export async function cancelCurrentMessage(): Promise<boolean> {
+  // Drain any queued messages
+  const drained = messageQueue.length;
+  while (messageQueue.length > 0) {
+    const item = messageQueue.shift()!;
+    item.reject(new Error("Cancelled"));
+  }
+
+  // Abort the active session request
+  if (orchestratorSession && currentCallback) {
+    try {
+      await orchestratorSession.abort();
+      console.log(`[max] Aborted in-flight request`);
+      return true;
+    } catch (err) {
+      console.error(`[max] Abort failed:`, err instanceof Error ? err.message : err);
+    }
+  }
+
+  return drained > 0;
 }
 
 export function getWorkers(): Map<string, WorkerInfo> {
