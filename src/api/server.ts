@@ -1,6 +1,7 @@
 import express from "express";
 import type { Request, Response } from "express";
 import { sendToOrchestrator, getWorkers } from "../copilot/orchestrator.js";
+import { sendPhoto } from "../telegram/bot.js";
 import { config } from "../config.js";
 
 const app = express();
@@ -79,6 +80,24 @@ app.post("/message", (req: Request, res: Response) => {
   );
 
   res.json({ status: "queued" });
+});
+
+// Send a photo to Telegram
+app.post("/send-photo", async (req: Request, res: Response) => {
+  const { photo, caption } = req.body as { photo?: string; caption?: string };
+
+  if (!photo || typeof photo !== "string") {
+    res.status(400).json({ error: "Missing 'photo' (file path or URL) in request body" });
+    return;
+  }
+
+  try {
+    await sendPhoto(photo, caption);
+    res.json({ status: "sent" });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: msg });
+  }
 });
 
 export function startApiServer(): Promise<void> {

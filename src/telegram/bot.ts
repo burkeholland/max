@@ -1,7 +1,7 @@
 import { Bot, type Context } from "grammy";
 import { config } from "../config.js";
 import { sendToOrchestrator } from "../copilot/orchestrator.js";
-import { chunkMessage } from "./formatter.js";
+import { chunkMessage, toTelegramMarkdown } from "./formatter.js";
 
 let bot: Bot | undefined;
 
@@ -33,8 +33,6 @@ export function createBot(): Bot {
   // Handle all text messages
   bot.on("message:text", async (ctx) => {
     const chatId = ctx.chat.id;
-    let lastSentText = "";
-
     // Show "typing..." indicator, repeat every 4s while processing
     let typingInterval: ReturnType<typeof setInterval> | undefined;
     const startTyping = () => {
@@ -52,59 +50,31 @@ export function createBot(): Bot {
 
     startTyping();
 
-    // Debounce streaming updates for Telegram (avoid rate limits)
-    let updateTimer: ReturnType<typeof setTimeout> | undefined;
-    let pendingText = "";
-    let messageId: number | undefined;
-
-    const flushUpdate = async () => {
-      if (pendingText === lastSentText) return;
-      const text = pendingText;
-      lastSentText = text;
-
-      try {
-        if (!messageId) {
-          const sent = await ctx.reply(text || "...");
-          messageId = sent.message_id;
-        } else {
-          await ctx.api.editMessageText(chatId, messageId, text);
-        }
-      } catch {
-        // Edit may fail if text hasn't changed or rate limited
-      }
-    };
-
     sendToOrchestrator(
       ctx.message.text,
       { type: "telegram", chatId },
       (text: string, done: boolean) => {
-        pendingText = text;
-
         if (done) {
-          if (updateTimer) clearTimeout(updateTimer);
           stopTyping();
           // Send final message — use chunking for long responses
           void (async () => {
-            const chunks = chunkMessage(text);
+            const formatted = toTelegramMarkdown(text);
+            const chunks = chunkMessage(formatted);
+            const fallbackChunks = chunkMessage(text);
+            const sendChunk = async (chunk: string, fallback: string) => {
+              await ctx.reply(chunk, { parse_mode: "MarkdownV2" }).catch(
+                () => ctx.reply(fallback) // fallback to plain text if markdown fails
+              );
+            };
             try {
-              if (messageId && chunks.length === 1) {
-                await ctx.api.editMessageText(chatId, messageId, chunks[0]);
-              } else {
-                if (messageId) {
-                  try {
-                    await ctx.api.deleteMessage(chatId, messageId);
-                  } catch {
-                    // May fail if message is too old
-                  }
-                }
-                for (const chunk of chunks) {
-                  await ctx.reply(chunk);
-                }
+              // Streaming disabled: only send final assistant response
+              for (let i = 0; i < chunks.length; i++) {
+                await sendChunk(chunks[i], fallbackChunks[i] ?? chunks[i]);
               }
             } catch {
-              // Fallback: send fresh chunks
+              // Last resort fallback
               try {
-                for (const chunk of chunks) {
+                for (const chunk of fallbackChunks) {
                   await ctx.reply(chunk);
                 }
               } catch {
@@ -112,14 +82,6 @@ export function createBot(): Bot {
               }
             }
           })();
-        } else {
-          // Debounced streaming update (every 1.5s)
-          if (!updateTimer) {
-            updateTimer = setTimeout(() => {
-              updateTimer = undefined;
-              flushUpdate();
-            }, 1500);
-          }
         }
       }
     );
@@ -145,12 +107,32 @@ export async function stopBot(): Promise<void> {
 /** Send an unsolicited message to the authorized user (for background task completions). */
 export async function sendProactiveMessage(text: string): Promise<void> {
   if (!bot) return;
-  const chunks = chunkMessage(text);
-  for (const chunk of chunks) {
+  const formatted = toTelegramMarkdown(text);
+  const chunks = chunkMessage(formatted);
+  const fallbackChunks = chunkMessage(text);
+  for (let i = 0; i < chunks.length; i++) {
     try {
-      await bot.api.sendMessage(config.authorizedUserId, chunk);
+      await bot.api.sendMessage(config.authorizedUserId, chunks[i], { parse_mode: "MarkdownV2" });
     } catch {
-      // Bot may not be connected yet
+      try {
+        await bot.api.sendMessage(config.authorizedUserId, fallbackChunks[i] ?? chunks[i]);
+      } catch {
+        // Bot may not be connected yet
+      }
     }
+  }
+}
+
+/** Send a photo to the authorized user. Accepts a file path or URL. */
+export async function sendPhoto(photo: string, caption?: string): Promise<void> {
+  if (!bot) return;
+  try {
+    const { InputFile } = await import("grammy");
+    const input = photo.startsWith("http") ? photo : new InputFile(photo);
+    await bot.api.sendPhoto(config.authorizedUserId, input, {
+      caption,
+    });
+  } catch (err) {
+    console.error("[max] Failed to send photo:", err instanceof Error ? err.message : err);
   }
 }

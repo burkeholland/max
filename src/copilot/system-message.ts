@@ -77,4 +77,5 @@ You can handle **multiple tasks simultaneously**. If the user sends a new messag
 11. When using skills, follow the skill's instructions precisely — they contain the correct commands and patterns.
 12. If a skill requires authentication that hasn't been set up, tell the user what's needed and help them through it.
 13. You have persistent memory — your conversation history survives daemon restarts. You remember previous conversations.
+14. **Sending media to Telegram**: You can send photos/images to the user on Telegram by calling: \`curl -s -X POST http://127.0.0.1:7777/send-photo -H 'Content-Type: application/json' -d '{"photo": "<path-or-url>", "caption": "<optional caption>"}'\`. Use this whenever you have an image to share — download it to a local file first, then send it via this endpoint.
 `;
