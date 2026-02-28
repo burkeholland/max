@@ -17,6 +17,9 @@ export const SKILLS_DIR = join(MAX_HOME, "skills");
 /** Path to Max's isolated session state (keeps CLI history clean) */
 export const SESSIONS_DIR = join(MAX_HOME, "sessions");
 
+/** Path to TUI readline history */
+export const HISTORY_PATH = join(MAX_HOME, "tui_history");
+
 /** Ensure ~/.max/ exists */
 export function ensureMaxHome(): void {
   mkdirSync(MAX_HOME, { recursive: true });
