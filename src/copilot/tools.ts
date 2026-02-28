@@ -1,10 +1,13 @@
 import { z } from "zod";
 import { approveAll, defineTool, type CopilotClient, type CopilotSession, type Tool } from "@github/copilot-sdk";
-import { getDb } from "../store/db.js";
+import { getDb, addMemory, searchMemories, removeMemory } from "../store/db.js";
 import { readdirSync, readFileSync, statSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { listSkills, createSkill } from "./skills.js";
+import { config, persistModel } from "../config.js";
+import { SESSIONS_DIR } from "../paths.js";
+import { getCurrentSourceChannel } from "./orchestrator.js";
 
 export interface WorkerInfo {
   name: string;
@@ -12,6 +15,8 @@ export interface WorkerInfo {
   workingDir: string;
   status: "idle" | "running" | "error";
   lastOutput?: string;
+  /** Channel that created this worker — completions route back here. */
+  originChannel?: "telegram" | "tui";
 }
 
 export interface ToolDeps {
@@ -39,6 +44,7 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
 
         const session = await deps.client.createSession({
           model: "claude-sonnet-4.5",
+          configDir: SESSIONS_DIR,
           workingDirectory: args.working_dir,
           onPermissionRequest: approveAll,
         });
@@ -48,6 +54,7 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
           session,
           workingDir: args.working_dir,
           status: "idle",
+          originChannel: getCurrentSourceChannel(),
         };
         deps.workers.set(args.name, worker);
 
@@ -274,6 +281,7 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
             session,
             workingDir: "(attached)",
             status: "idle",
+            originChannel: getCurrentSourceChannel(),
           };
           deps.workers.set(args.name, worker);
 
@@ -328,6 +336,143 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
       }),
       handler: async (args) => {
         return createSkill(args.slug, args.name, args.description, args.instructions);
+      },
+    }),
+
+    defineTool("list_models", {
+      description:
+        "List all available Copilot models. Shows model id, name, and billing tier. " +
+        "Marks the currently active model. Use when the user asks what models are available " +
+        "or wants to know which model is in use.",
+      parameters: z.object({}),
+      handler: async () => {
+        try {
+          const models = await deps.client.listModels();
+          if (models.length === 0) {
+            return "No models available.";
+          }
+          const current = config.copilotModel;
+          const lines = models.map((m) => {
+            const active = m.id === current ? " ← active" : "";
+            const billing = m.billing ? ` (${m.billing.multiplier}x)` : "";
+            return `• ${m.id}${billing}${active}`;
+          });
+          return `Available models (${models.length}):\n${lines.join("\n")}\n\nCurrent: ${current}`;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return `Failed to list models: ${msg}`;
+        }
+      },
+    }),
+
+    defineTool("switch_model", {
+      description:
+        "Switch the Copilot model Max uses for conversations. Takes effect on the next message. " +
+        "The change is persisted across restarts. Use when the user asks to change or switch models.",
+      parameters: z.object({
+        model_id: z.string().describe("The model id to switch to (from list_models)"),
+      }),
+      handler: async (args) => {
+        try {
+          const models = await deps.client.listModels();
+          const match = models.find((m) => m.id === args.model_id);
+          if (!match) {
+            const suggestions = models
+              .filter((m) => m.id.includes(args.model_id) || m.id.toLowerCase().includes(args.model_id.toLowerCase()))
+              .map((m) => m.id);
+            const hint = suggestions.length > 0
+              ? ` Did you mean: ${suggestions.join(", ")}?`
+              : " Use list_models to see available options.";
+            return `Model '${args.model_id}' not found.${hint}`;
+          }
+
+          const previous = config.copilotModel;
+          config.copilotModel = args.model_id;
+          persistModel(args.model_id);
+
+          return `Switched model from '${previous}' to '${args.model_id}'. Takes effect on next message.`;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return `Failed to switch model: ${msg}`;
+        }
+      },
+    }),
+
+    defineTool("remember", {
+      description:
+        "Save something to Max's long-term memory. Use when the user says 'remember that...', " +
+        "states a preference, shares a fact about themselves, or mentions something important " +
+        "that should be remembered across conversations. Also use proactively when you detect " +
+        "important information worth persisting.",
+      parameters: z.object({
+        category: z.enum(["preference", "fact", "project", "person", "routine"])
+          .describe("Category: preference (likes/dislikes/settings), fact (general knowledge), project (codebase/repo info), person (people info), routine (schedules/habits)"),
+        content: z.string().describe("The thing to remember — a concise, self-contained statement"),
+        source: z.enum(["user", "auto"]).optional().describe("'user' if explicitly asked to remember, 'auto' if Max detected it (default: 'user')"),
+      }),
+      handler: async (args) => {
+        const id = addMemory(args.category, args.content, args.source || "user");
+        return `Remembered (#${id}, ${args.category}): "${args.content}"`;
+      },
+    }),
+
+    defineTool("recall", {
+      description:
+        "Search Max's long-term memory for stored facts, preferences, or information. " +
+        "Use when you need to look up something the user told you before, or when the user " +
+        "asks 'do you remember...?' or 'what do you know about...?'",
+      parameters: z.object({
+        keyword: z.string().optional().describe("Search term to match against memory content"),
+        category: z.enum(["preference", "fact", "project", "person", "routine"]).optional()
+          .describe("Optional: filter by category"),
+      }),
+      handler: async (args) => {
+        const results = searchMemories(args.keyword, args.category);
+        if (results.length === 0) {
+          return "No matching memories found.";
+        }
+        const lines = results.map(
+          (m) => `• #${m.id} [${m.category}] ${m.content} (${m.source}, ${m.created_at})`
+        );
+        return `Found ${results.length} memory/memories:\n${lines.join("\n")}`;
+      },
+    }),
+
+    defineTool("forget", {
+      description:
+        "Remove a specific memory from Max's long-term storage. Use when the user asks " +
+        "to forget something, or when a memory is outdated/incorrect. Requires the memory ID " +
+        "(use recall to find it first).",
+      parameters: z.object({
+        memory_id: z.number().int().describe("The memory ID to remove (from recall results)"),
+      }),
+      handler: async (args) => {
+        const removed = removeMemory(args.memory_id);
+        return removed
+          ? `Memory #${args.memory_id} forgotten.`
+          : `Memory #${args.memory_id} not found — it may have already been removed.`;
+      },
+    }),
+
+    defineTool("restart_max", {
+      description:
+        "Restart the Max daemon process. Use when the user asks Max to restart himself, " +
+        "or when a restart is needed to pick up configuration changes. " +
+        "Spawns a new process and exits the current one.",
+      parameters: z.object({
+        reason: z.string().optional().describe("Optional reason for the restart"),
+      }),
+      handler: async (args) => {
+        const reason = args.reason ? ` (${args.reason})` : "";
+        // Dynamic import to avoid circular dependency
+        const { restartDaemon } = await import("../daemon.js");
+        // Schedule restart after returning the response
+        setTimeout(() => {
+          restartDaemon().catch((err) => {
+            console.error("[max] Restart failed:", err);
+          });
+        }, 1000);
+        return `Restarting Max${reason}. I'll be back in a few seconds.`;
       },
     }),
   ];

@@ -4,3 +4,17 @@ dist/
 *.db
 *.db-shm
 *.db-wal
+
+# Copilot CLI agent skills (managed by `npx skills`)
+.agents/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+*.swp
+*.swo
+*~
+.vscode/
+.idea/

@@ -1,12 +1,11 @@
 import Database from "better-sqlite3";
-import path from "path";
-
-const DB_PATH = path.join(process.cwd(), "max.db");
+import { DB_PATH, ensureMaxHome } from "../paths.js";
 
 let db: Database.Database | undefined;
 
 export function getDb(): Database.Database {
   if (!db) {
+    ensureMaxHome();
     db = new Database(DB_PATH);
     db.pragma("journal_mode = WAL");
     db.exec(`
@@ -34,6 +33,16 @@ export function getDb(): Database.Database {
         content TEXT NOT NULL,
         source TEXT NOT NULL DEFAULT 'unknown',
         ts DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS memories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category TEXT NOT NULL CHECK(category IN ('preference', 'fact', 'project', 'person', 'routine')),
+        content TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'user',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_accessed DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
     // Migrate: if the table already existed with a stricter CHECK, recreate it
@@ -98,6 +107,85 @@ export function getRecentConversation(limit = 20): string {
     const content = r.content.length > 500 ? r.content.slice(0, 500) + "…" : r.content;
     return `${tag}: ${content}`;
   }).join("\n\n");
+}
+
+/** Add a memory to long-term storage. */
+export function addMemory(
+  category: "preference" | "fact" | "project" | "person" | "routine",
+  content: string,
+  source: "user" | "auto" = "user"
+): number {
+  const db = getDb();
+  const result = db.prepare(
+    `INSERT INTO memories (category, content, source) VALUES (?, ?, ?)`
+  ).run(category, content, source);
+  return result.lastInsertRowid as number;
+}
+
+/** Search memories by keyword and/or category. */
+export function searchMemories(
+  keyword?: string,
+  category?: string,
+  limit = 20
+): { id: number; category: string; content: string; source: string; created_at: string }[] {
+  const db = getDb();
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+
+  if (keyword) {
+    conditions.push(`content LIKE ?`);
+    params.push(`%${keyword}%`);
+  }
+  if (category) {
+    conditions.push(`category = ?`);
+    params.push(category);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  params.push(limit);
+
+  const rows = db.prepare(
+    `SELECT id, category, content, source, created_at FROM memories ${where} ORDER BY last_accessed DESC LIMIT ?`
+  ).all(...params) as { id: number; category: string; content: string; source: string; created_at: string }[];
+
+  // Update last_accessed for returned memories
+  if (rows.length > 0) {
+    const ids = rows.map((r) => r.id).join(",");
+    db.exec(`UPDATE memories SET last_accessed = CURRENT_TIMESTAMP WHERE id IN (${ids})`);
+  }
+
+  return rows;
+}
+
+/** Remove a memory by ID. */
+export function removeMemory(id: number): boolean {
+  const db = getDb();
+  const result = db.prepare(`DELETE FROM memories WHERE id = ?`).run(id);
+  return result.changes > 0;
+}
+
+/** Get a compact summary of all memories for injection into system message. */
+export function getMemorySummary(): string {
+  const db = getDb();
+  const rows = db.prepare(
+    `SELECT id, category, content FROM memories ORDER BY category, last_accessed DESC`
+  ).all() as { id: number; category: string; content: string }[];
+
+  if (rows.length === 0) return "";
+
+  // Group by category
+  const grouped: Record<string, { id: number; content: string }[]> = {};
+  for (const r of rows) {
+    if (!grouped[r.category]) grouped[r.category] = [];
+    grouped[r.category].push({ id: r.id, content: r.content });
+  }
+
+  const sections = Object.entries(grouped).map(([cat, items]) => {
+    const lines = items.map((i) => `  - [#${i.id}] ${i.content}`).join("\n");
+    return `**${cat}**:\n${lines}`;
+  });
+
+  return sections.join("\n");
 }
 
 export function closeDb(): void {

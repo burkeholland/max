@@ -1,8 +1,11 @@
 import express from "express";
 import type { Request, Response } from "express";
-import { sendToOrchestrator, getWorkers } from "../copilot/orchestrator.js";
+import { sendToOrchestrator, getWorkers, cancelCurrentMessage } from "../copilot/orchestrator.js";
 import { sendPhoto } from "../telegram/bot.js";
-import { config } from "../config.js";
+import { config, persistModel } from "../config.js";
+import { searchMemories } from "../store/db.js";
+import { listSkills } from "../copilot/skills.js";
+import { restartDaemon } from "../daemon.js";
 
 const app = express();
 app.use(express.json());
@@ -80,6 +83,56 @@ app.post("/message", (req: Request, res: Response) => {
   );
 
   res.json({ status: "queued" });
+});
+
+// Cancel the current in-flight message
+app.post("/cancel", async (_req: Request, res: Response) => {
+  const cancelled = await cancelCurrentMessage();
+  // Notify all SSE clients that the message was cancelled
+  for (const [, sseRes] of sseClients) {
+    sseRes.write(
+      `data: ${JSON.stringify({ type: "cancelled" })}\n\n`
+    );
+  }
+  res.json({ status: "ok", cancelled });
+});
+
+// Get or switch model
+app.get("/model", (_req: Request, res: Response) => {
+  res.json({ model: config.copilotModel });
+});
+app.post("/model", (req: Request, res: Response) => {
+  const { model } = req.body as { model?: string };
+  if (!model || typeof model !== "string") {
+    res.status(400).json({ error: "Missing 'model' in request body" });
+    return;
+  }
+  const previous = config.copilotModel;
+  config.copilotModel = model;
+  persistModel(model);
+  res.json({ previous, current: model });
+});
+
+// List memories
+app.get("/memory", (_req: Request, res: Response) => {
+  const memories = searchMemories(undefined, undefined, 100);
+  res.json(memories);
+});
+
+// List skills
+app.get("/skills", (_req: Request, res: Response) => {
+  const skills = listSkills();
+  res.json(skills);
+});
+
+// Restart daemon
+app.post("/restart", (_req: Request, res: Response) => {
+  res.json({ status: "restarting" });
+  setTimeout(() => {
+    restartDaemon().catch((err) => {
+      console.error("[max] Restart failed:", err);
+    });
+  }, 500);
 });
 
 // Send a photo to Telegram

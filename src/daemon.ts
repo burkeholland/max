@@ -3,6 +3,8 @@ import { initOrchestrator, setMessageLogger, setProactiveNotify } from "./copilo
 import { startApiServer, broadcastToSSE } from "./api/server.js";
 import { createBot, startBot, stopBot, sendProactiveMessage } from "./telegram/bot.js";
 import { getDb, closeDb } from "./store/db.js";
+import { config } from "./config.js";
+import { spawn } from "child_process";
 
 function truncate(text: string, max = 200): string {
   const oneLine = text.replace(/\n/g, " ").trim();
@@ -33,39 +35,51 @@ async function main(): Promise<void> {
   await initOrchestrator(client);
   console.log("[max] Orchestrator session ready");
 
-  // Wire up proactive notifications for background task completions
-  setProactiveNotify((text) => {
-    console.log(`[max] bg-notify ⟵  ${truncate(text)}`);
-    sendProactiveMessage(text);
-    broadcastToSSE(text);
+  // Wire up proactive notifications — route to the originating channel
+  setProactiveNotify((text, channel) => {
+    console.log(`[max] bg-notify (${channel ?? "all"}) ⟵  ${truncate(text)}`);
+    if (!channel || channel === "telegram") {
+      if (config.telegramEnabled) sendProactiveMessage(text);
+    }
+    if (!channel || channel === "tui") {
+      broadcastToSSE(text);
+    }
   });
 
   // Start HTTP API for TUI
   await startApiServer();
 
-  // Start Telegram bot
-  createBot();
-  await startBot();
+  // Start Telegram bot (if configured)
+  if (config.telegramEnabled) {
+    createBot();
+    await startBot();
+  } else {
+    console.log("[max] Telegram not configured — skipping bot. Run 'max setup' to configure.");
+  }
 
   console.log("[max] Max is fully operational.");
 
   // Proactively notify the user that Max is back online
-  await sendProactiveMessage("I'm back online 🟢").catch(() => {});
+  if (config.telegramEnabled) {
+    await sendProactiveMessage("I'm back online 🟢").catch(() => {});
+  }
 }
 
 // Graceful shutdown
 async function shutdown(): Promise<void> {
   console.log("\n[max] Shutting down...");
   // Notify user before going offline
-  try {
-    await sendProactiveMessage("Restarting — back in a sec ⏳");
-  } catch {
-    // Best effort
-  }
-  try {
-    await stopBot();
-  } catch {
-    // Bot may not have started
+  if (config.telegramEnabled) {
+    try {
+      await sendProactiveMessage("Restarting — back in a sec ⏳");
+    } catch {
+      // Best effort
+    }
+    try {
+      await stopBot();
+    } catch {
+      // Bot may not have started
+    }
   }
   try {
     await stopClient();
@@ -74,6 +88,29 @@ async function shutdown(): Promise<void> {
   }
   closeDb();
   console.log("[max] Goodbye.");
+  process.exit(0);
+}
+
+/** Restart the daemon by spawning a new process and exiting. */
+export async function restartDaemon(): Promise<void> {
+  console.log("[max] Restarting...");
+
+  if (config.telegramEnabled) {
+    await sendProactiveMessage("Restarting — back in a sec ⏳").catch(() => {});
+    try { await stopBot(); } catch { /* best effort */ }
+  }
+  try { await stopClient(); } catch { /* best effort */ }
+  closeDb();
+
+  // Spawn a detached replacement process with the same args
+  const child = spawn(process.execPath, process.argv.slice(1), {
+    detached: true,
+    stdio: "inherit",
+    env: process.env,
+  });
+  child.unref();
+
+  console.log("[max] New process spawned. Exiting old process.");
   process.exit(0);
 }
 

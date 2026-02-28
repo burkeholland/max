@@ -2,72 +2,49 @@
 
 AI orchestrator powered by [Copilot SDK](https://github.com/github/copilot-sdk) — control multiple Copilot CLI sessions from Telegram or a local terminal.
 
-## How it Works
-
-Max runs a persistent **orchestrator Copilot session** — an always-on AI brain that receives your messages and decides how to handle them. For coding tasks, it spawns **worker Copilot sessions** in specific directories. For simple questions, it answers directly.
-
-You can talk to Max from:
-- **Telegram** — remote access from your phone (authenticated by user ID)
-- **TUI** — local terminal client (no auth needed)
-
-## Setup
-
-### 1. Install dependencies
+## Install
 
 ```bash
-npm install
+curl -fsSL https://raw.githubusercontent.com/burkeholland/max/main/install.sh | bash
 ```
 
-### 2. Create a Telegram bot
-
-1. Open Telegram and search for **@BotFather**
-2. Send `/newbot` and follow the prompts
-3. Copy the bot token
-
-### 3. Get your Telegram user ID
-
-1. Search for **@userinfobot** on Telegram
-2. Send it any message
-3. Copy your user ID number
-
-### 4. Configure environment
+Or install directly with npm:
 
 ```bash
-cp .env.example .env
+npm install -g @burkeholland/max
 ```
 
-Edit `.env` with your bot token and user ID:
+## Quick Start
 
-```
-TELEGRAM_BOT_TOKEN=your-bot-token-here
-AUTHORIZED_USER_ID=123456789
+### 1. Run setup
+
+```bash
+max setup
 ```
 
-### 5. Make sure Copilot CLI is authenticated
+This creates `~/.max/` and walks you through configuration (Telegram bot token, etc.). Telegram is optional — you can use Max with just the terminal UI.
+
+### 2. Make sure Copilot CLI is authenticated
 
 ```bash
 copilot login
 ```
 
-## Usage
-
-### Start the daemon
+### 3. Start Max
 
 ```bash
-npm run daemon
+max start
 ```
 
-This starts the Max daemon which connects to Telegram and starts the local HTTP API on port 7777.
-
-### Connect via TUI (local terminal)
+### 4. Connect via terminal
 
 In a separate terminal:
 
 ```bash
-npm run tui
+max tui
 ```
 
-### Talk to Max
+### 5. Talk to Max
 
 From Telegram or the TUI, just send natural language:
 
@@ -77,6 +54,15 @@ From Telegram or the TUI, just send natural language:
 - "Kill the auth-fix session"
 - "What's the capital of France?"
 
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `max start` | Start the Max daemon |
+| `max tui` | Connect to the daemon via terminal |
+| `max setup` | Interactive first-run configuration |
+| `max help` | Show available commands |
+
 ### TUI commands
 
 | Command | Description |
@@ -85,6 +71,14 @@ From Telegram or the TUI, just send natural language:
 | `/status` | Daemon health check |
 | `/help` | Show help |
 | `/quit` | Exit the TUI |
+
+## How it Works
+
+Max runs a persistent **orchestrator Copilot session** — an always-on AI brain that receives your messages and decides how to handle them. For coding tasks, it spawns **worker Copilot sessions** in specific directories. For simple questions, it answers directly.
+
+You can talk to Max from:
+- **Telegram** — remote access from your phone (authenticated by user ID)
+- **TUI** — local terminal client (no auth needed)
 
 ## Architecture
 
@@ -97,14 +91,19 @@ Telegram ──→ Max Daemon ←── TUI
    Worker 1  Worker 2  Worker N
 ```
 
-- **Daemon** (`npm run daemon`) — persistent service running Copilot SDK + Telegram bot + HTTP API
-- **TUI** (`npm run tui`) — lightweight terminal client connecting to the daemon
+- **Daemon** (`max start`) — persistent service running Copilot SDK + Telegram bot + HTTP API
+- **TUI** (`max tui`) — lightweight terminal client connecting to the daemon
 - **Orchestrator** — long-running Copilot session with custom tools for session management
 - **Workers** — child Copilot sessions for specific coding tasks
 
 ## Development
 
 ```bash
+# Clone and install
+git clone https://github.com/burkeholland/max.git
+cd max
+npm install
+
 # Watch mode
 npm run dev
 
