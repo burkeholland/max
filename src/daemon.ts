@@ -59,33 +59,34 @@ async function main(): Promise<void> {
 
   console.log("[max] Max is fully operational.");
 
-  // Proactively notify the user that Max is back online
-  if (config.telegramEnabled) {
+  // Notify user if this is a restart (not a fresh start)
+  if (config.telegramEnabled && process.env.MAX_RESTARTED === "1") {
     await sendProactiveMessage("I'm back online 🟢").catch(() => {});
+    delete process.env.MAX_RESTARTED;
   }
 }
 
 // Graceful shutdown
+let shuttingDown = false;
 async function shutdown(): Promise<void> {
-  console.log("\n[max] Shutting down...");
-  // Notify user before going offline
+  if (shuttingDown) {
+    console.log("\n[max] Forced exit.");
+    process.exit(1);
+  }
+  shuttingDown = true;
+  console.log("\n[max] Shutting down... (Ctrl+C again to force)");
+
+  // Force exit after 3 seconds no matter what
+  const forceTimer = setTimeout(() => {
+    console.log("[max] Shutdown timed out — forcing exit.");
+    process.exit(1);
+  }, 3000);
+  forceTimer.unref();
+
   if (config.telegramEnabled) {
-    try {
-      await sendProactiveMessage("Restarting — back in a sec ⏳");
-    } catch {
-      // Best effort
-    }
-    try {
-      await stopBot();
-    } catch {
-      // Bot may not have started
-    }
+    try { await stopBot(); } catch { /* best effort */ }
   }
-  try {
-    await stopClient();
-  } catch {
-    // Client may not have started
-  }
+  try { await stopClient(); } catch { /* best effort */ }
   closeDb();
   console.log("[max] Goodbye.");
   process.exit(0);
@@ -106,7 +107,7 @@ export async function restartDaemon(): Promise<void> {
   const child = spawn(process.execPath, process.argv.slice(1), {
     detached: true,
     stdio: "inherit",
-    env: process.env,
+    env: { ...process.env, MAX_RESTARTED: "1" },
   });
   child.unref();
 
