@@ -315,7 +315,7 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
         "to do something it doesn't know how to do yet (e.g. 'check my email', 'search the web'). " +
         "First, use a worker session to research what CLI tools are available on the system (run 'which', " +
         "'--help', etc.), then create the skill with the instructions you've learned. " +
-        "The skill becomes available after restarting the daemon.",
+        "The skill becomes available on the next message (no restart needed).",
       parameters: z.object({
         slug: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).describe("Short kebab-case identifier for the skill, e.g. 'gmail', 'web-search'"),
         name: z.string().refine(s => !s.includes('\n'), "must be single-line").describe("Human-readable name for the skill, e.g. 'Gmail', 'Web Search'"),

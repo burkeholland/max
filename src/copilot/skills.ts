@@ -98,7 +98,7 @@ ${instructions}
 `;
   writeFileSync(join(skillDir, "SKILL.md"), skillMd);
 
-  return `Skill '${name}' created at ${skillDir}. It will be available after restarting the daemon.`;
+  return `Skill '${name}' created at ${skillDir}. It will be available on your next message.`;
 }
 
 /** Parse YAML frontmatter from a SKILL.md file. */

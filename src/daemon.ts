@@ -48,11 +48,20 @@ async function main(): Promise<void> {
   await startBot();
 
   console.log("[max] Max is fully operational.");
+
+  // Proactively notify the user that Max is back online
+  await sendProactiveMessage("I'm back online 🟢").catch(() => {});
 }
 
 // Graceful shutdown
 async function shutdown(): Promise<void> {
   console.log("\n[max] Shutting down...");
+  // Notify user before going offline
+  try {
+    await sendProactiveMessage("Restarting — back in a sec ⏳");
+  } catch {
+    // Best effort
+  }
   try {
     await stopBot();
   } catch {
