@@ -1,19 +1,18 @@
 import { approveAll, type CopilotClient, type CopilotSession } from "@github/copilot-sdk";
 import { createTools, type WorkerInfo } from "./tools.js";
-import { ORCHESTRATOR_SYSTEM_MESSAGE } from "./system-message.js";
+import { getOrchestratorSystemMessage } from "./system-message.js";
 import { config } from "../config.js";
 import { loadMcpConfig } from "./mcp-config.js";
 import { getSkillDirectories } from "./skills.js";
-import { getState, setState } from "../store/db.js";
 import { resetClient } from "./client.js";
+import { logConversation, getRecentConversation } from "../store/db.js";
 
-const SESSION_ID_KEY = "orchestrator_session_id";
-const MAX_RETRIES = 5;
+const MAX_RETRIES = 3;
+const RECONNECT_DELAYS_MS = [1_000, 3_000, 10_000];
 const HEALTH_CHECK_INTERVAL_MS = 30_000;
-const RECONNECT_DELAYS_MS = [1_000, 2_000, 5_000, 10_000, 20_000];
 
 export type MessageSource =
-  | { type: "telegram"; chatId: number }
+  | { type: "telegram"; chatId: number; messageId: number }
   | { type: "tui"; connectionId: string }
   | { type: "background" };
 
@@ -34,19 +33,8 @@ export function setProactiveNotify(fn: ProactiveNotifyFn): void {
   proactiveNotifyFn = fn;
 }
 
-interface PendingRequest {
-  prompt: string;
-  source: MessageSource;
-  callback: MessageCallback;
-  retries?: number;
-}
-
-let orchestratorSession: CopilotSession | undefined;
 let copilotClient: CopilotClient | undefined;
 const workers = new Map<string, WorkerInfo>();
-const requestQueue: PendingRequest[] = [];
-let processing = false;
-let reconnecting = false;
 let healthCheckTimer: ReturnType<typeof setInterval> | undefined;
 
 function getSessionConfig() {
@@ -78,17 +66,33 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Start periodic health check that proactively reconnects when the client drops. */
+/** Ensure the SDK client is connected, resetting if necessary. Coalesces concurrent resets. */
+let resetPromise: Promise<CopilotClient> | undefined;
+async function ensureClient(): Promise<CopilotClient> {
+  if (copilotClient && copilotClient.getState() === "connected") {
+    return copilotClient;
+  }
+  if (!resetPromise) {
+    console.log(`[max] Client not connected (state: ${copilotClient?.getState() ?? "null"}), resetting…`);
+    resetPromise = resetClient().then((c) => {
+      console.log(`[max] Client reset successful, state: ${c.getState()}`);
+      copilotClient = c;
+      return c;
+    }).finally(() => { resetPromise = undefined; });
+  }
+  return resetPromise;
+}
+
+/** Start periodic health check that proactively reconnects the client. */
 function startHealthCheck(): void {
   if (healthCheckTimer) return;
   healthCheckTimer = setInterval(async () => {
-    if (!copilotClient || reconnecting) return;
+    if (!copilotClient) return;
     try {
       const state = copilotClient.getState();
       if (state !== "connected") {
-        console.log(`[max] Health check: client state is '${state}', triggering reconnect…`);
-        orchestratorSession = undefined;
-        await reconnectOrchestrator();
+        console.log(`[max] Health check: client state is '${state}', resetting…`);
+        await ensureClient();
       }
     } catch (err) {
       console.error(`[max] Health check error:`, err instanceof Error ? err.message : err);
@@ -98,38 +102,27 @@ function startHealthCheck(): void {
 
 export async function initOrchestrator(client: CopilotClient): Promise<void> {
   copilotClient = client;
-  const { tools, mcpServers, skillDirectories } = getSessionConfig();
+  const { mcpServers, skillDirectories } = getSessionConfig();
 
   console.log(`[max] Loading ${Object.keys(mcpServers).length} MCP server(s): ${Object.keys(mcpServers).join(", ") || "(none)"}`);
   console.log(`[max] Skill directories: ${skillDirectories.join(", ") || "(none)"}`);
+  console.log(`[max] Per-message session mode — each message gets its own session`);
+  startHealthCheck();
+}
 
-  // Try to resume previous orchestrator session
-  const savedSessionId = getState(SESSION_ID_KEY);
-  if (savedSessionId) {
-    try {
-      console.log(`[max] Resuming orchestrator session ${savedSessionId.slice(0, 8)}…`);
-      orchestratorSession = await client.resumeSession(savedSessionId, {
-        streaming: true,
-        tools,
-        mcpServers,
-        skillDirectories,
-        onPermissionRequest: approveAll,
-      });
-      console.log(`[max] Orchestrator session resumed successfully`);
-      startHealthCheck();
-      return;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.log(`[max] Could not resume session: ${msg}. Creating new session.`);
-    }
-  }
+/** Create an ephemeral session, send a prompt, return the response. */
+async function executeInSession(prompt: string, callback: MessageCallback): Promise<string> {
+  const client = await ensureClient();
+  const { tools, mcpServers, skillDirectories } = getSessionConfig();
 
-  // Create fresh session
-  orchestratorSession = await client.createSession({
+  // Inject recent conversation history as context
+  const recentConversation = getRecentConversation();
+
+  const session: CopilotSession = await client.createSession({
     model: config.copilotModel,
     streaming: true,
     systemMessage: {
-      content: ORCHESTRATOR_SYSTEM_MESSAGE,
+      content: getOrchestratorSystemMessage(recentConversation || undefined),
     },
     tools,
     mcpServers,
@@ -137,84 +130,21 @@ export async function initOrchestrator(client: CopilotClient): Promise<void> {
     onPermissionRequest: approveAll,
   });
 
-  // Persist session ID for future reconnection
-  setState(SESSION_ID_KEY, orchestratorSession.sessionId);
-  console.log(`[max] New orchestrator session: ${orchestratorSession.sessionId.slice(0, 8)}…`);
-  startHealthCheck();
-}
-
-/** Attempt to reconnect the orchestrator session after a failure. */
-async function reconnectOrchestrator(): Promise<boolean> {
-  if (reconnecting) return false;
-  reconnecting = true;
+  let accumulated = "";
+  const unsubDelta = session.on("assistant.message_delta", (event) => {
+    accumulated += event.data.deltaContent;
+    callback(accumulated, false);
+  });
 
   try {
-    // If the client itself is dead, create a brand new one
-    if (!copilotClient || copilotClient.getState() !== "connected") {
-      console.log(`[max] Client not connected (state: ${copilotClient?.getState() ?? "null"}), resetting client…`);
-      try {
-        copilotClient = await resetClient();
-        console.log(`[max] Client reset successful, state: ${copilotClient.getState()}`);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[max] Client reset failed: ${msg}. Will retry on next attempt.`);
-        return false;
-      }
-    }
-
-    const { tools, mcpServers, skillDirectories } = getSessionConfig();
-
-    // Always try to resume the saved session first — this reloads it from disk
-    // and preserves conversation history even if the server evicted it from memory.
-    const savedSessionId = getState(SESSION_ID_KEY);
-    if (savedSessionId) {
-      try {
-        console.log(`[max] Resuming session ${savedSessionId.slice(0, 8)}… (preserving memory)`);
-        orchestratorSession = await copilotClient.resumeSession(savedSessionId, {
-          streaming: true,
-          tools,
-          mcpServers,
-          skillDirectories,
-          onPermissionRequest: approveAll,
-        });
-        console.log(`[max] Session resumed — conversation history intact`);
-        return true;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.log(`[max] Resume failed: ${msg}. Session data may be deleted — creating new session.`);
-      }
-    }
-
-    // Only create a fresh session if resume is truly impossible (no saved ID or files deleted)
-    orchestratorSession = await copilotClient.createSession({
-      model: config.copilotModel,
-      streaming: true,
-      systemMessage: { content: ORCHESTRATOR_SYSTEM_MESSAGE },
-      tools,
-      mcpServers,
-      skillDirectories,
-      onPermissionRequest: approveAll,
-    });
-    setState(SESSION_ID_KEY, orchestratorSession.sessionId);
-    console.log(`[max] ⚠ New session created (memory reset): ${orchestratorSession.sessionId.slice(0, 8)}…`);
-    return true;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[max] Reconnection failed: ${msg}`);
-    orchestratorSession = undefined;
-    return false;
+    const result = await session.sendAndWait({ prompt }, 300_000);
+    const finalContent = result?.data?.content || accumulated || "(No response)";
+    return finalContent;
   } finally {
-    reconnecting = false;
+    unsubDelta();
+    // Best-effort cleanup — don't block on it
+    session.destroy().catch(() => {});
   }
-}
-
-export async function sendToOrchestrator(
-  prompt: string,
-  source: MessageSource,
-  callback: MessageCallback
-): Promise<void> {
-  requestQueue.push({ prompt, source, callback });
-  processQueue();
 }
 
 function isRecoverableError(err: unknown): boolean {
@@ -222,80 +152,54 @@ function isRecoverableError(err: unknown): boolean {
   return /timeout|disconnect|connection|EPIPE|ECONNRESET|ECONNREFUSED|socket|closed|ENOENT|spawn|not found|expired|stale/i.test(msg);
 }
 
-async function processQueue(): Promise<void> {
-  if (processing || requestQueue.length === 0) return;
-  processing = true;
-
-  const request = requestQueue.shift()!;
+export async function sendToOrchestrator(
+  prompt: string,
+  source: MessageSource,
+  callback: MessageCallback
+): Promise<void> {
   const sourceLabel =
-    request.source.type === "telegram" ? "telegram" :
-    request.source.type === "tui" ? "tui" : "background";
-  logMessage("in", sourceLabel, request.prompt);
+    source.type === "telegram" ? "telegram" :
+    source.type === "tui" ? "tui" : "background";
+  logMessage("in", sourceLabel, prompt);
 
-  // Tag the prompt with its source channel so the AI knows where the message came from
-  const taggedPrompt = request.source.type === "background"
-    ? request.prompt
-    : `[via ${sourceLabel}] ${request.prompt}`;
+  // Tag the prompt with its source channel
+  const taggedPrompt = source.type === "background"
+    ? prompt
+    : `[via ${sourceLabel}] ${prompt}`;
 
-  if (!orchestratorSession) {
-    // Try to reconnect before giving up
-    const recovered = await reconnectOrchestrator();
-    if (!recovered) {
-      request.callback("Max is not ready yet. Please try again in a moment.", true);
-      processing = false;
-      processQueue();
-      return;
-    }
-  }
+  // Log role: background events are "system", user messages are "user"
+  const logRole = source.type === "background" ? "system" : "user";
 
-  let accumulated = "";
-  let unsubDelta: (() => void) | undefined;
-  let unsubIdle: (() => void) | undefined;
+  // Fire-and-forget — runs concurrently with other messages
+  void (async () => {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const finalContent = await executeInSession(taggedPrompt, callback);
+        // Deliver response to user FIRST, then log best-effort
+        callback(finalContent, true);
+        try { logMessage("out", sourceLabel, finalContent); } catch { /* best-effort */ }
+        // Log both sides of the conversation after delivery (avoids duplicate context)
+        try { logConversation(logRole, prompt, sourceLabel); } catch { /* best-effort */ }
+        try { logConversation("assistant", finalContent, sourceLabel); } catch { /* best-effort */ }
+        return;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
 
-  try {
-    unsubDelta = orchestratorSession!.on("assistant.message_delta", (event) => {
-      accumulated += event.data.deltaContent;
-      request.callback(accumulated, false);
-    });
-
-    unsubIdle = orchestratorSession!.on("session.idle", () => {
-      // Cleanup happens below after sendAndWait resolves
-    });
-
-    const result = await orchestratorSession!.sendAndWait({ prompt: taggedPrompt }, 300_000);
-    const finalContent = result?.data?.content || accumulated || "(No response)";
-    logMessage("out", sourceLabel, finalContent);
-    request.callback(finalContent, true);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-
-    if (isRecoverableError(err)) {
-      const retries = (request.retries ?? 0) + 1;
-      const delay = RECONNECT_DELAYS_MS[Math.min(retries - 1, RECONNECT_DELAYS_MS.length - 1)];
-      console.error(`[max] Recoverable error: ${msg}. Retry ${retries}/${MAX_RETRIES} after ${delay}ms…`);
-      orchestratorSession = undefined;
-
-      if (retries <= MAX_RETRIES) {
-        await sleep(delay);
-        const recovered = await reconnectOrchestrator();
-        if (recovered) {
-          request.retries = retries;
-          requestQueue.unshift(request);
-        } else {
-          request.callback(`Connection lost and reconnect failed: ${msg}`, true);
+        if (isRecoverableError(err) && attempt < MAX_RETRIES) {
+          const delay = RECONNECT_DELAYS_MS[Math.min(attempt, RECONNECT_DELAYS_MS.length - 1)];
+          console.error(`[max] Recoverable error: ${msg}. Retry ${attempt + 1}/${MAX_RETRIES} after ${delay}ms…`);
+          await sleep(delay);
+          // Reset client before retry in case the connection is stale
+          try { await ensureClient(); } catch { /* will fail again on next attempt */ }
+          continue;
         }
-      } else {
-        request.callback(`Connection lost after ${MAX_RETRIES} retries: ${msg}`, true);
+
+        console.error(`[max] Error processing message: ${msg}`);
+        callback(`Error: ${msg}`, true);
+        return;
       }
-    } else {
-      request.callback(`Error: ${msg}`, true);
     }
-  } finally {
-    unsubDelta?.();
-    unsubIdle?.();
-    processing = false;
-    processQueue();
-  }
+  })();
 }
 
 export function getWorkers(): Map<string, WorkerInfo> {

@@ -33,6 +33,9 @@ export function createBot(): Bot {
   // Handle all text messages
   bot.on("message:text", async (ctx) => {
     const chatId = ctx.chat.id;
+    const userMessageId = ctx.message.message_id;
+    const replyParams = { message_id: userMessageId };
+
     // Show "typing..." indicator, repeat every 4s while processing
     let typingInterval: ReturnType<typeof setInterval> | undefined;
     const startTyping = () => {
@@ -52,30 +55,31 @@ export function createBot(): Bot {
 
     sendToOrchestrator(
       ctx.message.text,
-      { type: "telegram", chatId },
+      { type: "telegram", chatId, messageId: userMessageId },
       (text: string, done: boolean) => {
         if (done) {
           stopTyping();
-          // Send final message — use chunking for long responses
+          // Send final message — use chunking for long responses, reply-quote original
           void (async () => {
             const formatted = toTelegramMarkdown(text);
             const chunks = chunkMessage(formatted);
             const fallbackChunks = chunkMessage(text);
-            const sendChunk = async (chunk: string, fallback: string) => {
-              await ctx.reply(chunk, { parse_mode: "MarkdownV2" }).catch(
-                () => ctx.reply(fallback) // fallback to plain text if markdown fails
+            const sendChunk = async (chunk: string, fallback: string, isFirst: boolean) => {
+              const opts = isFirst
+                ? { parse_mode: "MarkdownV2" as const, reply_parameters: replyParams }
+                : { parse_mode: "MarkdownV2" as const };
+              await ctx.reply(chunk, opts).catch(
+                () => ctx.reply(fallback, isFirst ? { reply_parameters: replyParams } : {})
               );
             };
             try {
-              // Streaming disabled: only send final assistant response
               for (let i = 0; i < chunks.length; i++) {
-                await sendChunk(chunks[i], fallbackChunks[i] ?? chunks[i]);
+                await sendChunk(chunks[i], fallbackChunks[i] ?? chunks[i], i === 0);
               }
             } catch {
-              // Last resort fallback
               try {
-                for (const chunk of fallbackChunks) {
-                  await ctx.reply(chunk);
+                for (let i = 0; i < fallbackChunks.length; i++) {
+                  await ctx.reply(fallbackChunks[i], i === 0 ? { reply_parameters: replyParams } : {});
                 }
               } catch {
                 // Nothing more we can do
