@@ -548,9 +548,33 @@ setTimeout(() => {
     // Save to persistent history (skip commands)
     if (!trimmed.startsWith("/")) {
       saveHistoryLine(trimmed);
-      // Re-echo user input with YOU label
-      process.stdout.write(`\x1b[1A\r\x1b[J`);
-      console.log(`  ${C.coral("YOU")}     ${trimmed}`);
+
+      // Re-echo user input with YOU label, accounting for terminal wrapping
+      const cols = process.stdout.columns || 80;
+      const promptVisualLen = 4; // "  › " is 4 visible chars
+      const inputVisualLen = promptVisualLen + trimmed.length;
+      const wrappedLines = Math.ceil(Math.max(inputVisualLen, 1) / cols);
+      // Move up enough lines to cover all wrapped lines
+      if (wrappedLines > 1) {
+        process.stdout.write(`\x1b[${wrappedLines}A\r\x1b[J`);
+      } else {
+        process.stdout.write(`\x1b[1A\r\x1b[J`);
+      }
+
+      // Print with YOU label, wrapping long text with LABEL_PAD
+      const label = `  ${C.coral("YOU")}     `;
+      const contentWidth = cols - 10; // 10 = label visual width
+      if (contentWidth > 0 && trimmed.length > contentWidth) {
+        const lines: string[] = [];
+        for (let i = 0; i < trimmed.length; i += contentWidth) {
+          lines.push(trimmed.slice(i, i + contentWidth));
+        }
+        for (let i = 0; i < lines.length; i++) {
+          console.log((i === 0 ? label : LABEL_PAD) + lines[i]);
+        }
+      } else {
+        console.log(label + trimmed);
+      }
     }
 
     if (trimmed === "/quit" || trimmed === "/exit") {
