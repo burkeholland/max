@@ -270,7 +270,12 @@ async function executeOnSession(prompt: string, callback: MessageCallback): Prom
 
 /** Process the message queue one at a time. */
 async function processQueue(): Promise<void> {
-  if (processing) return;
+  if (processing) {
+    if (messageQueue.length > 0) {
+      console.log(`[max] Message queued (${messageQueue.length} waiting — orchestrator is busy)`);
+    }
+    return;
+  }
   processing = true;
 
   while (messageQueue.length > 0) {

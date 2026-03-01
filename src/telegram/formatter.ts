@@ -34,47 +34,91 @@ export function chunkMessage(text: string): string[] {
 }
 
 /**
- * Escape special characters for Telegram MarkdownV2 format.
+ * Escape special characters for Telegram MarkdownV2 plain text segments.
  */
-export function escapeTelegramMarkdown(text: string): string {
+function escapeSegment(text: string): string {
   return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
 }
 
 /**
+ * Convert a markdown table into a readable mobile-friendly list.
+ * Returns already-escaped MarkdownV2 text ready to be stashed.
+ * *Casa del Poeta* — $383 · ⭐ 4.89
+ */
+function convertTable(table: string): string {
+  const rows = table.trim().split("\n").filter(row => !/^\|[-| :]+\|$/.test(row.trim()));
+  const parsed = rows.map(row =>
+    row.split("|").map(c => c.trim()).filter(Boolean)
+  );
+  if (parsed.length === 0) return "";
+
+  // Skip header row, format data rows as: *first col* — rest · rest
+  const dataRows = parsed.length > 1 ? parsed.slice(1) : parsed;
+  return dataRows.map(cols => {
+    if (cols.length === 0) return "";
+    const first = `*${escapeSegment(cols[0])}*`;
+    const rest = cols.slice(1).map(c => escapeSegment(c)).join(" · ");
+    return rest ? `${first} — ${rest}` : first;
+  }).join("\n");
+}
+
+/**
  * Convert standard markdown from the AI into Telegram MarkdownV2.
- * Handles bold, italic, code, and preserves line breaks.
+ * Handles bold, italic, code blocks, headers, tables, and horizontal rules.
  */
 export function toTelegramMarkdown(text: string): string {
-  // Extract code blocks and inline code first to protect them
-  const codeBlocks: string[] = [];
-  let processed = text.replace(/```[\s\S]*?```/g, (match) => {
-    codeBlocks.push(match);
-    return `%%CODEBLOCK${codeBlocks.length - 1}%%`;
+  // 1. Stash code blocks (protect from processing)
+  const stash: string[] = [];
+  const stashToken = (s: string) => { stash.push(s); return `\x00STASH${stash.length - 1}\x00`; };
+
+  let out = text;
+
+  // Stash fenced code blocks
+  out = out.replace(/```([a-z]*)\n?([\s\S]*?)```/g, (_m, lang, code) =>
+    stashToken("```" + (lang || "") + "\n" + code.trim() + "\n```")
+  );
+
+  // Stash inline code
+  out = out.replace(/`([^`\n]+)`/g, (_m, code) =>
+    stashToken("`" + code + "`")
+  );
+
+  // 2. Convert tables before any escaping — stash result to avoid double-escaping
+  out = out.replace(/(?:^\|.+\|[ \t]*$\n?)+/gm, (table) =>
+    stashToken(convertTable(table) + "\n")
+  );
+
+  // 3. Convert headers → bold
+  out = out.replace(/^#{1,6}\s+(.+)$/gm, (_m, title) => `**${title.trim()}**`);
+
+  // 4. Remove horizontal rules
+  out = out.replace(/^[-*_]{3,}\s*$/gm, "");
+
+  // 5. Extract bold/italic markers before escaping
+  const boldParts: string[] = [];
+  out = out.replace(/\*\*(.+?)\*\*/g, (_m, inner) => {
+    boldParts.push(inner);
+    return `\x00BOLD${boldParts.length - 1}\x00`;
   });
 
-  const inlineCode: string[] = [];
-  processed = processed.replace(/`[^`]+`/g, (match) => {
-    inlineCode.push(match);
-    return `%%INLINE${inlineCode.length - 1}%%`;
+  const italicParts: string[] = [];
+  out = out.replace(/\*(.+?)\*/g, (_m, inner) => {
+    italicParts.push(inner);
+    return `\x00ITALIC${italicParts.length - 1}\x00`;
   });
 
-  // Escape special chars in normal text (not inside code)
-  processed = processed.replace(/([_\[\]()~>#+\-=|{}.!\\])/g, "\\$1");
+  // 6. Escape everything that remains
+  out = escapeSegment(out);
 
-  // Convert **bold** (must come before * italic)
-  processed = processed.replace(/\\\*\\\*(.+?)\\\*\\\*/g, "*$1*");
-  // Convert *italic*
-  processed = processed.replace(/\\\*(.+?)\\\*/g, "_$1_");
+  // 7. Restore bold and italic with escaped inner text
+  out = out.replace(/\x00BOLD(\d+)\x00/g, (_m, i) => `*${escapeSegment(boldParts[+i])}*`);
+  out = out.replace(/\x00ITALIC(\d+)\x00/g, (_m, i) => `_${escapeSegment(italicParts[+i])}_`);
 
-  // Restore inline code
-  processed = processed.replace(/%%INLINE(\d+)%%/g, (_m, i) => {
-    return inlineCode[parseInt(i)];
-  });
+  // 8. Restore stashed code blocks/inline code
+  out = out.replace(/\x00STASH(\d+)\x00/g, (_m, i) => stash[+i]);
 
-  // Restore code blocks — convert to Telegram format
-  processed = processed.replace(/%%CODEBLOCK(\d+)%%/g, (_m, i) => {
-    return codeBlocks[parseInt(i)];
-  });
+  // 9. Clean up excessive blank lines
+  out = out.replace(/\n{3,}/g, "\n\n");
 
-  return processed;
+  return out.trim();
 }

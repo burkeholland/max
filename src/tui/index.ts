@@ -16,39 +16,154 @@ const C = {
   magenta: (s: string) => `\x1b[35m${s}\x1b[0m`,
   boldCyan: (s: string) => `\x1b[1;36m${s}\x1b[0m`,
   bgDim: (s: string) => `\x1b[48;5;236m${s}\x1b[0m`,
+  coral: (s: string) => `\x1b[38;2;255;127;80m${s}\x1b[0m`,
+  boldWhite: (s: string) => `\x1b[1;97m${s}\x1b[0m`,
+  blue: (s: string) => `\x1b[38;2;14;165;233m${s}\x1b[0m`,
 };
 
-// ── Markdown → ANSI rendering ────────────────────────────
-function renderMarkdown(text: string): string {
-  // Handle code blocks first (before other formatting)
-  text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_match, lang, code) => {
-    const label = lang ? C.dim(`  ${lang}`) + "\n" : "";
-    const formatted = code
-      .split("\n")
-      .map((line: string) => `  ${C.dim(line)}`)
-      .join("\n");
-    return `${label}${formatted}`;
-  });
+// ── Layout constants ─────────────────────────────────────
+const LABEL_PAD = "          "; // 10-char indent for continuation lines
 
+// ── Markdown → ANSI rendering ────────────────────────────
+
+/** Render a single line of markdown to ANSI (used by both streaming and batch). */
+function renderLine(line: string, inCodeBlock: boolean): string {
+  if (inCodeBlock) {
+    return `  ${C.dim("│")} ${line}`;
+  }
+  if (/^[-*_]{3,}\s*$/.test(line)) return C.dim("──────────────────────────────────");
+  if (line.startsWith("### ")) return C.coral(line.slice(4));
+  if (line.startsWith("## ")) return C.boldWhite(line.slice(3));
+  if (line.startsWith("# ")) return C.boldWhite(line.slice(2));
+  if (line.startsWith("> ")) return `${C.dim("│")} ${C.dim(line.slice(2))}`;
+  if (/^ {2,}[-*] /.test(line)) return `    ◦ ${line.replace(/^ +[-*] /, "")}`;
+  if (/^[-*] /.test(line)) return `  • ${line.slice(2)}`;
+  if (/^\d+\. /.test(line)) return `  ${line}`;
+  return line;
+}
+
+/** Apply inline formatting (bold, code, links, etc.) to already-rendered text. */
+function applyInlineFormatting(text: string): string {
   return text
-    .split("\n")
-    .map((line: string) => {
-      // Headers
-      if (line.startsWith("### ")) return C.boldCyan(line.slice(4));
-      if (line.startsWith("## ")) return C.boldCyan(line.slice(3));
-      if (line.startsWith("# ")) return C.boldCyan(line.slice(2));
-      // Blockquotes
-      if (line.startsWith("> ")) return `  ${C.dim(line.slice(2))}`;
-      // List items
-      if (/^[-*] /.test(line)) return `  • ${line.slice(2)}`;
-      // Numbered lists
-      if (/^\d+\. /.test(line)) return `  ${line}`;
-      return line;
-    })
-    .join("\n")
-    // Inline formatting (after line-level processing)
-    .replace(/\*\*(.+?)\*\*/g, C.bold("$1"))
-    .replace(/`([^`]+)`/g, C.yellow("$1"));
+    .replace(/\*\*\*(.+?)\*\*\*/g, `\x1b[1;3m$1\x1b[0m`)
+    .replace(/\*\*(.+?)\*\*/g, `\x1b[1m$1\x1b[0m`)
+    .replace(/~~(.+?)~~/g, `\x1b[9m$1\x1b[0m`)
+    .replace(/`([^`]+)`/g, C.yellow("$1"))
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, t, u) => `${t} ${C.dim(`(${u})`)}`);
+}
+
+/** Render a complete markdown document to ANSI (used for proactive/background messages). */
+function renderMarkdown(text: string): string {
+  let inCodeBlock = false;
+  const rendered = text.split("\n").map((line: string) => {
+    if (/^```/.test(line)) {
+      if (inCodeBlock) { inCodeBlock = false; return ""; }
+      inCodeBlock = true;
+      const lang = line.slice(3).trim();
+      return lang ? C.dim(lang) : "";
+    }
+    return renderLine(line, inCodeBlock);
+  });
+  return applyInlineFormatting(rendered.join("\n"));
+}
+
+/** Write a rendered message with a role label (MAX/SYS). */
+function writeLabeled(role: "max" | "sys", text: string): void {
+  const label = role === "max"
+    ? `  ${C.cyan("MAX")}     `
+    : `  ${C.dim("SYS")}     `;
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    process.stdout.write((i === 0 ? label : LABEL_PAD) + lines[i] + "\n");
+  }
+}
+
+// ── Streaming markdown renderer ──────────────────────────
+let streamLineBuffer = "";
+let inStreamCodeBlock = false;
+let streamIsFirstLine = true;
+
+/** Get the prefix for the current stream line (label or padding). */
+function streamPrefix(): string {
+  return streamIsFirstLine ? `  ${C.cyan("MAX")}     ` : LABEL_PAD;
+}
+
+/** Clear the current visual line (handles terminal wrapping). */
+function clearVisualLine(charCount: number): void {
+  const cols = process.stdout.columns || 80;
+  const up = Math.ceil(Math.max(charCount, 1) / cols) - 1;
+  if (up > 0) process.stdout.write(`\x1b[${up}A`);
+  process.stdout.write(`\r\x1b[J`);
+}
+
+/** Render a buffered line and write it with the appropriate prefix. */
+function writeRenderedStreamLine(line: string): void {
+  const prefix = streamPrefix();
+  if (/^```/.test(line)) {
+    if (inStreamCodeBlock) {
+      inStreamCodeBlock = false;
+    } else {
+      inStreamCodeBlock = true;
+      const lang = line.slice(3).trim();
+      process.stdout.write(prefix + (lang ? C.dim(lang) : ""));
+    }
+  } else {
+    const rendered = applyInlineFormatting(renderLine(line, inStreamCodeBlock));
+    process.stdout.write(prefix + rendered);
+  }
+  process.stdout.write("\n");
+  streamIsFirstLine = false;
+}
+
+/** Process a chunk of streaming text, rendering complete lines with labels. */
+function writeStreamChunk(newText: string): void {
+  let pos = 0;
+  while (pos < newText.length) {
+    const nl = newText.indexOf("\n", pos);
+
+    if (nl === -1) {
+      // No newline — buffer and write raw with prefix if at line start
+      const partial = newText.slice(pos);
+      if (streamLineBuffer.length === 0) {
+        process.stdout.write(streamPrefix());
+      }
+      streamLineBuffer += partial;
+      process.stdout.write(partial);
+      return;
+    }
+
+    // Got a complete line
+    const segment = newText.slice(pos, nl);
+    const hadPartial = streamLineBuffer.length > 0;
+    streamLineBuffer += segment;
+
+    if (hadPartial) {
+      // Clear the partially-written raw text
+      clearVisualLine(10 + streamLineBuffer.length);
+    }
+
+    if (streamLineBuffer.length === 0 && !hadPartial) {
+      // Empty line
+      process.stdout.write(streamPrefix() + "\n");
+      streamIsFirstLine = false;
+    } else {
+      writeRenderedStreamLine(streamLineBuffer);
+    }
+
+    streamLineBuffer = "";
+    pos = nl + 1;
+  }
+}
+
+/** Flush any remaining partial line and reset streaming state. */
+function flushStreamState(): void {
+  if (streamLineBuffer.length > 0) {
+    clearVisualLine(10 + streamLineBuffer.length);
+    writeRenderedStreamLine(streamLineBuffer);
+  }
+  streamLineBuffer = "";
+  inStreamCodeBlock = false;
+  streamIsFirstLine = true;
 }
 
 // ── State ─────────────────────────────────────────────────
@@ -94,17 +209,23 @@ const history = loadHistory();
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
-  prompt: `${C.cyan("max")} ${C.dim(">")} `,
+  prompt: `  ${C.coral("›")} `,
   history,
   historySize: MAX_HISTORY,
 });
 
 // ── Welcome banner ────────────────────────────────────────
 function showBanner(): void {
+  console.clear();
   console.log();
-  console.log(C.boldCyan("  ╔══════════════════════════════════╗"));
-  console.log(C.boldCyan("  ║") + C.bold("     MAX") + C.dim("  — personal AI daemon") + C.boldCyan("    ║"));
-  console.log(C.boldCyan("  ╚══════════════════════════════════╝"));
+  console.log();
+  console.log(C.boldWhite("    ██      ██     █████     ██   ██"));
+  console.log(C.boldWhite("    ███    ███    ██   ██     ██ ██"));
+  console.log(C.boldWhite("    ██ ████ ██    ███████      ███"));
+  console.log(C.boldWhite("    ██  ██  ██    ██   ██     ██ ██"));
+  console.log(C.boldWhite("    ██      ██    ██   ██    ██   ██") + "  " + C.coral("●"));
+  console.log();
+  console.log(C.dim("    personal AI assistant for developers"));
   console.log();
 }
 
@@ -112,9 +233,9 @@ function showStatus(model?: string, skillCount?: number): void {
   const parts: string[] = [];
   if (model) parts.push(`${C.dim("model:")} ${C.cyan(model)}`);
   if (skillCount !== undefined) parts.push(`${C.dim("skills:")} ${C.cyan(String(skillCount))}`);
-  if (parts.length) console.log(`  ${parts.join("   ")}`);
+  if (parts.length) console.log(`    ${parts.join("    ")}`);
   console.log();
-  console.log(C.dim("  Type a message, /help for commands, Esc to cancel"));
+  console.log(C.dim("    /help for commands · esc to cancel"));
   console.log();
 }
 
@@ -136,7 +257,7 @@ function connectSSE(): void {
   const url = new URL("/stream", API_BASE);
 
   http.get(url, (res) => {
-    console.log(C.green("  ✓ Connected to Max daemon"));
+    console.log(C.green("  ● ") + C.dim("max — connected"));
     fetchStartupInfo();
     let buffer = "";
 
@@ -156,27 +277,37 @@ function connectSSE(): void {
               if (!isStreaming) {
                 isStreaming = true;
                 streamedContent = "";
+                streamLineBuffer = "";
+                inStreamCodeBlock = false;
+                streamIsFirstLine = true;
                 process.stdout.write("\n");
               }
               // Content is cumulative — only print the new part
               const full = event.content || "";
               const newText = full.slice(streamedContent.length);
               if (newText) {
-                process.stdout.write(newText);
+                writeStreamChunk(newText);
                 streamedContent = full;
               }
             } else if (event.type === "cancelled") {
               isStreaming = false;
               streamedContent = "";
+              streamLineBuffer = "";
+              inStreamCodeBlock = false;
+              streamIsFirstLine = true;
             } else if (event.type === "message") {
               if (isStreaming) {
-                // Streaming is done — just add spacing and re-prompt
+                // Streaming is done — flush remaining and re-prompt
+                flushStreamState();
                 isStreaming = false;
                 streamedContent = "";
                 process.stdout.write("\n\n");
               } else {
-                // Proactive/background message — render with markdown
-                console.log(`\n${renderMarkdown(event.content)}\n`);
+                // Proactive/background message — render with label
+                const rendered = renderMarkdown(event.content);
+                process.stdout.write("\n");
+                writeLabeled("max", rendered);
+                process.stdout.write("\n");
               }
               rl.prompt();
             }
@@ -188,19 +319,19 @@ function connectSSE(): void {
     });
 
     res.on("end", () => {
-      console.log(C.yellow("\n  ⚠ Disconnected from Max daemon. Reconnecting..."));
+      console.log(C.yellow("\n    ⚠ disconnected — reconnecting..."));
       isStreaming = false;
       setTimeout(connectSSE, 2000);
     });
 
     res.on("error", (err) => {
-      console.error(C.red(`\n  ✗ Connection error: ${err.message}. Retrying...`));
+      console.error(C.red(`\n    ✗ connection error — retrying...`));
       isStreaming = false;
       setTimeout(connectSSE, 3000);
     });
   }).on("error", (err) => {
-    console.error(C.red(`  ✗ Cannot connect to Max daemon at ${API_BASE}: ${err.message}`));
-    console.error(C.dim("    Is the daemon running? Start it with: max start"));
+    console.error(C.red(`    ✗ cannot connect to daemon`));
+    console.error(C.dim("      start with: max start"));
     setTimeout(connectSSE, 5000);
   });
 }
@@ -300,7 +431,7 @@ function sendCancel(): void {
       if (isStreaming) process.stdout.write("\n");
       isStreaming = false;
       streamedContent = "";
-      console.log(C.red("  ⛔ Cancelled.\n"));
+      console.log(C.dim("    ⛔ cancelled\n"));
       rl.prompt();
     });
   });
@@ -374,26 +505,24 @@ function cmdSkills(): void {
 
 function cmdHelp(): void {
   console.log();
-  console.log(C.bold("  Commands"));
-  console.log(`  ${C.cyan("/cancel")}              Cancel the current message`);
-  console.log(`  ${C.cyan("/model")}               Show current model`);
-  console.log(`  ${C.cyan("/model")} ${C.dim("<name>")}       Switch model`);
-  console.log(`  ${C.cyan("/memory")}              Show stored memories`);
-  console.log(`  ${C.cyan("/skills")}              List installed skills`);
-  console.log(`  ${C.cyan("/workers")}             List active worker sessions`);
-  console.log(`  ${C.cyan("/restart")}             Restart Max daemon`);
-  console.log(`  ${C.cyan("/status")}              Daemon health check`);
-  console.log(`  ${C.cyan("/clear")}               Clear the screen`);
-  console.log(`  ${C.cyan("/quit")}                Exit the TUI`);
+  console.log(C.boldWhite("    COMMANDS"));
   console.log();
-  console.log(C.dim("  Press Escape to cancel a running message"));
-  console.log(C.dim("  Anything else is sent to Max"));
+  console.log(`    ${C.coral("/model")} ${C.dim("[name]")}        show or switch model`);
+  console.log(`    ${C.coral("/memory")}               show stored memories`);
+  console.log(`    ${C.coral("/skills")}               list installed skills`);
+  console.log(`    ${C.coral("/workers")}              list active sessions`);
+  console.log(`    ${C.coral("/status")}               daemon health check`);
+  console.log(`    ${C.coral("/restart")}              restart daemon`);
+  console.log(`    ${C.coral("/clear")}                clear screen`);
+  console.log(`    ${C.coral("/quit")}                 exit`);
+  console.log();
+  console.log(C.dim("    press escape to cancel a running response"));
   console.log();
 }
 
 // ── Main ──────────────────────────────────────────────────
 showBanner();
-console.log(C.dim("  Connecting to Max daemon..."));
+console.log(C.dim("    connecting..."));
 connectSSE();
 
 // Wait a moment for SSE connection before showing prompt
@@ -419,11 +548,14 @@ setTimeout(() => {
     // Save to persistent history (skip commands)
     if (!trimmed.startsWith("/")) {
       saveHistoryLine(trimmed);
+      // Re-echo user input with YOU label
+      process.stdout.write(`\x1b[1A\r\x1b[J`);
+      console.log(`  ${C.coral("YOU")}     ${trimmed}`);
     }
 
     if (trimmed === "/quit" || trimmed === "/exit") {
       trimHistoryFile();
-      console.log(C.dim("  Bye."));
+      console.log(C.dim("\n    bye.\n"));
       process.exit(0);
     }
 
@@ -460,7 +592,7 @@ setTimeout(() => {
 
   rl.on("close", () => {
     trimHistoryFile();
-    console.log(C.dim("\n  Bye."));
+    console.log(C.dim("\n    bye.\n"));
     process.exit(0);
   });
 }, 1000);

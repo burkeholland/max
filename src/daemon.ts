@@ -1,5 +1,5 @@
 import { getClient, stopClient } from "./copilot/client.js";
-import { initOrchestrator, setMessageLogger, setProactiveNotify } from "./copilot/orchestrator.js";
+import { initOrchestrator, setMessageLogger, setProactiveNotify, getWorkers } from "./copilot/orchestrator.js";
 import { startApiServer, broadcastToSSE } from "./api/server.js";
 import { createBot, startBot, stopBot, sendProactiveMessage } from "./telegram/bot.js";
 import { getDb, closeDb } from "./store/db.js";
@@ -67,13 +67,26 @@ async function main(): Promise<void> {
 }
 
 // Graceful shutdown
-let shuttingDown = false;
+let shutdownState: "idle" | "warned" | "shutting_down" = "idle";
 async function shutdown(): Promise<void> {
-  if (shuttingDown) {
+  if (shutdownState === "shutting_down") {
     console.log("\n[max] Forced exit.");
     process.exit(1);
   }
-  shuttingDown = true;
+
+  // Check for active workers before shutting down
+  const workers = getWorkers();
+  const running = Array.from(workers.values()).filter(w => w.status === "running");
+
+  if (running.length > 0 && shutdownState === "idle") {
+    const names = running.map(w => w.name).join(", ");
+    console.log(`\n[max] ⚠ ${running.length} active worker(s) will be destroyed: ${names}`);
+    console.log("[max] Press Ctrl+C again to shut down, or wait for workers to finish.");
+    shutdownState = "warned";
+    return;
+  }
+
+  shutdownState = "shutting_down";
   console.log("\n[max] Shutting down... (Ctrl+C again to force)");
 
   // Force exit after 3 seconds no matter what
@@ -86,6 +99,13 @@ async function shutdown(): Promise<void> {
   if (config.telegramEnabled) {
     try { await stopBot(); } catch { /* best effort */ }
   }
+
+  // Destroy all active worker sessions to free memory
+  await Promise.allSettled(
+    Array.from(workers.values()).map((w) => w.session.destroy())
+  );
+  workers.clear();
+
   try { await stopClient(); } catch { /* best effort */ }
   closeDb();
   console.log("[max] Goodbye.");
@@ -96,10 +116,23 @@ async function shutdown(): Promise<void> {
 export async function restartDaemon(): Promise<void> {
   console.log("[max] Restarting...");
 
+  const activeWorkers = getWorkers();
+  const runningCount = Array.from(activeWorkers.values()).filter(w => w.status === "running").length;
+  if (runningCount > 0) {
+    console.log(`[max] ⚠ Destroying ${runningCount} active worker(s) for restart`);
+  }
+
   if (config.telegramEnabled) {
     await sendProactiveMessage("Restarting — back in a sec ⏳").catch(() => {});
     try { await stopBot(); } catch { /* best effort */ }
   }
+
+  // Destroy all active worker sessions to free memory
+  await Promise.allSettled(
+    Array.from(activeWorkers.values()).map((w) => w.session.destroy())
+  );
+  activeWorkers.clear();
+
   try { await stopClient(); } catch { /* best effort */ }
   closeDb();
 

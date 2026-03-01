@@ -1002,74 +1002,61 @@
 <section class="arch">
   <h2>How it works<span>.</span></h2>
   <div class="arch-svg-wrap fade-in">
-    <svg viewBox="0 0 1000 560" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Max architecture: messages arrive from Telegram and Terminal, Max daemon orchestrates Copilot CLI worker sessions, which interact with GitHub and the internet">
+    <svg viewBox="0 0 1100 480" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Max architecture: orchestrator with Copilot CLI workers, powered by GitHub Copilot SDK, connected to Telegram and Terminal">
 
-      <!-- "Your machine" boundary -->
-      <rect x="20" y="30" width="660" height="500" rx="22" fill="none" stroke="rgba(17,24,39,0.07)" stroke-width="1.5" stroke-dasharray="9 6"/>
-      <text x="350" y="552" text-anchor="middle" font-family="Space Mono, monospace" font-size="11" fill="rgba(17,24,39,0.18)" letter-spacing="0.18em">YOUR MACHINE</text>
+      <!-- Max block (main container — light, airy) -->
+      <rect x="40" y="20" width="680" height="440" rx="24" fill="none" stroke="rgba(17,24,39,0.08)" stroke-width="1.5"/>
 
-      <!-- Telegram node -->
-      <rect x="46" y="80" width="180" height="108" rx="16" fill="rgba(14,165,233,0.06)" stroke="#0ea5e9" stroke-width="2"/>
-      <text x="136" y="128" text-anchor="middle" font-family="Space Mono, monospace" font-size="26" fill="#0ea5e9">📱</text>
-      <text x="136" y="158" text-anchor="middle" font-family="Space Mono, monospace" font-size="14" font-weight="700" fill="#0ea5e9">Telegram</text>
-      <text x="136" y="177" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" fill="rgba(14,165,233,0.5)">phone · desktop</text>
+      <!-- Max header -->
+      <text x="380" y="78" text-anchor="middle" font-family="Space Mono, monospace" font-size="32" font-weight="700" fill="#111827">max<tspan fill="#ff7f50">.</tspan></text>
+      <text x="380" y="108" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" fill="rgba(17,24,39,0.22)" letter-spacing="0.18em">ORCHESTRATOR · MEMORY · SKILLS</text>
 
-      <!-- Terminal node -->
-      <rect x="46" y="370" width="180" height="108" rx="16" fill="rgba(132,204,22,0.06)" stroke="#84cc16" stroke-width="2"/>
-      <text x="136" y="418" text-anchor="middle" font-family="Space Mono, monospace" font-size="26" fill="#84cc16">⌨</text>
-      <text x="136" y="448" text-anchor="middle" font-family="Space Mono, monospace" font-size="14" font-weight="700" fill="#84cc16">Terminal</text>
-      <text x="136" y="467" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" fill="rgba(132,204,22,0.5)">local TUI</text>
-
-      <!-- Connector: Telegram → Max -->
-      <path d="M226 134 C280 134 300 220 360 220" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" fill="none"/>
-      <polygon points="355,215 365,220 355,225" fill="#0ea5e9"/>
-
-      <!-- Connector: Terminal → Max -->
-      <path d="M226 424 C280 424 300 338 360 338" stroke="#84cc16" stroke-width="2" stroke-linecap="round" fill="none"/>
-      <polygon points="355,333 365,338 355,343" fill="#84cc16"/>
-
-      <!-- Max Daemon (center) -->
-      <rect x="360" y="90" width="300" height="378" rx="20" fill="#111827"/>
-
-      <!-- Max header inside daemon -->
-      <text x="510" y="140" text-anchor="middle" font-family="Space Mono, monospace" font-size="22" font-weight="700" fill="#ff7f50">Max</text>
-      <text x="510" y="164" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" fill="rgba(255,255,255,0.28)" letter-spacing="0.16em">DAEMON</text>
-      <line x1="380" y1="182" x2="640" y2="182" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
-      <text x="510" y="202" text-anchor="middle" font-family="Space Mono, monospace" font-size="9" fill="rgba(255,255,255,0.22)" letter-spacing="0.13em">ORCHESTRATOR · MEMORY · SKILLS</text>
+      <line x1="80" y1="128" x2="680" y2="128" stroke="rgba(17,24,39,0.06)" stroke-width="1"/>
 
       <!-- Workers label -->
-      <text x="395" y="238" font-family="Space Mono, monospace" font-size="9" fill="rgba(255,255,255,0.2)" letter-spacing="0.1em">WORKERS</text>
+      <text x="80" y="162" font-family="Space Mono, monospace" font-size="10" fill="rgba(17,24,39,0.2)" letter-spacing="0.14em">WORKERS</text>
 
-      <!-- Worker boxes -->
-      <rect x="385" y="250" width="82" height="62" rx="10" fill="rgba(14,165,233,0.08)" stroke="#0ea5e9" stroke-width="1.5"/>
-      <text x="426" y="278" text-anchor="middle" font-family="Space Mono, monospace" font-size="16" font-weight="700" fill="#0ea5e9">W1</text>
-      <text x="426" y="300" text-anchor="middle" font-family="Space Mono, monospace" font-size="9" fill="rgba(14,165,233,0.45)" letter-spacing="0.05em">CLI</text>
+      <!-- Worker 1 -->
+      <rect x="80" y="178" width="180" height="82" rx="14" fill="rgba(14,165,233,0.04)" stroke="#0ea5e9" stroke-width="1.5"/>
+      <text x="170" y="216" text-anchor="middle" font-family="Space Mono, monospace" font-size="16" font-weight="700" fill="#0ea5e9">Worker 1</text>
+      <text x="170" y="242" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" fill="rgba(14,165,233,0.4)">Copilot CLI</text>
 
-      <rect x="469" y="250" width="82" height="62" rx="10" fill="rgba(14,165,233,0.08)" stroke="#0ea5e9" stroke-width="1.5"/>
-      <text x="510" y="278" text-anchor="middle" font-family="Space Mono, monospace" font-size="16" font-weight="700" fill="#0ea5e9">W2</text>
-      <text x="510" y="300" text-anchor="middle" font-family="Space Mono, monospace" font-size="9" fill="rgba(14,165,233,0.45)" letter-spacing="0.05em">CLI</text>
+      <!-- Worker 2 -->
+      <rect x="280" y="178" width="180" height="82" rx="14" fill="rgba(14,165,233,0.04)" stroke="#0ea5e9" stroke-width="1.5"/>
+      <text x="370" y="216" text-anchor="middle" font-family="Space Mono, monospace" font-size="16" font-weight="700" fill="#0ea5e9">Worker 2</text>
+      <text x="370" y="242" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" fill="rgba(14,165,233,0.4)">Copilot CLI</text>
 
-      <rect x="553" y="250" width="82" height="62" rx="10" fill="rgba(14,165,233,0.08)" stroke="#0ea5e9" stroke-width="1.5"/>
-      <text x="594" y="278" text-anchor="middle" font-family="Space Mono, monospace" font-size="16" font-weight="700" fill="#0ea5e9">W3</text>
-      <text x="594" y="300" text-anchor="middle" font-family="Space Mono, monospace" font-size="9" fill="rgba(14,165,233,0.45)" letter-spacing="0.05em">CLI</text>
+      <!-- Worker 3 -->
+      <rect x="480" y="178" width="180" height="82" rx="14" fill="rgba(14,165,233,0.04)" stroke="#0ea5e9" stroke-width="1.5"/>
+      <text x="570" y="216" text-anchor="middle" font-family="Space Mono, monospace" font-size="16" font-weight="700" fill="#0ea5e9">Worker 3</text>
+      <text x="570" y="242" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" fill="rgba(14,165,233,0.4)">Copilot CLI</text>
 
-      <!-- SDK foundation bar -->
-      <rect x="385" y="334" width="250" height="110" rx="12" fill="rgba(255,127,80,0.06)" stroke="#ff7f50" stroke-width="1.5"/>
-      <text x="510" y="372" text-anchor="middle" font-family="Space Mono, monospace" font-size="13" font-weight="700" fill="#ff7f50">GitHub Copilot SDK</text>
-      <line x1="400" y1="385" x2="620" y2="385" stroke="rgba(255,127,80,0.15)" stroke-width="1"/>
-      <text x="510" y="404" text-anchor="middle" font-family="Space Mono, monospace" font-size="9" fill="rgba(255,127,80,0.5)" letter-spacing="0.08em">MODELS · TOOLS · CONTEXT</text>
-      <text x="510" y="424" text-anchor="middle" font-family="Space Mono, monospace" font-size="9" fill="rgba(255,127,80,0.35)">claude · gpt · gemini · ...</text>
+      <!-- SDK foundation -->
+      <rect x="80" y="296" width="580" height="134" rx="16" fill="rgba(255,127,80,0.04)" stroke="#ff7f50" stroke-width="1.5"/>
+      <text x="370" y="342" text-anchor="middle" font-family="Space Mono, monospace" font-size="16" font-weight="700" fill="#ff7f50">GitHub Copilot SDK</text>
+      <line x1="120" y1="360" x2="620" y2="360" stroke="rgba(255,127,80,0.12)" stroke-width="1"/>
+      <text x="370" y="386" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" fill="rgba(255,127,80,0.45)" letter-spacing="0.1em">MODELS · TOOLS · CONTEXT</text>
+      <text x="370" y="412" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" fill="rgba(255,127,80,0.3)">claude · gpt · gemini · ...</text>
 
-      <!-- Connector: Max → GitHub -->
-      <path d="M660 279 C710 279 720 279 760 279" stroke="rgba(17,24,39,0.18)" stroke-width="2" stroke-dasharray="7 4" stroke-linecap="round"/>
-      <polygon points="756,274 766,279 756,284" fill="rgba(17,24,39,0.18)"/>
+      <!-- Connector: Max → Telegram -->
+      <path d="M720 160 C775 160 785 140 830 140" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" fill="none"/>
+      <polygon points="826,135 836,140 826,145" fill="#0ea5e9"/>
 
-      <!-- GitHub node -->
-      <rect x="760" y="200" width="210" height="158" rx="16" fill="none" stroke="rgba(17,24,39,0.14)" stroke-width="2"/>
-      <text x="865" y="258" text-anchor="middle" font-family="Space Mono, monospace" font-size="28" fill="rgba(17,24,39,0.55)">⚙</text>
-      <text x="865" y="292" text-anchor="middle" font-family="Space Mono, monospace" font-size="14" font-weight="700" fill="rgba(17,24,39,0.65)">GitHub</text>
-      <text x="865" y="313" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" fill="rgba(17,24,39,0.35)" letter-spacing="0.06em">PRs · issues · repos</text>
-      <text x="865" y="330" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" fill="rgba(17,24,39,0.22)">+ the internet</text>
+      <!-- Connector: Max → Terminal -->
+      <path d="M720 360 C775 360 785 370 830 370" stroke="#84cc16" stroke-width="2" stroke-linecap="round" fill="none"/>
+      <polygon points="826,365 836,370 826,375" fill="#84cc16"/>
+
+      <!-- Telegram node -->
+      <rect x="830" y="78" width="220" height="124" rx="16" fill="rgba(14,165,233,0.04)" stroke="#0ea5e9" stroke-width="2"/>
+      <text x="940" y="124" text-anchor="middle" font-family="Space Mono, monospace" font-size="28" fill="#0ea5e9">📱</text>
+      <text x="940" y="156" text-anchor="middle" font-family="Space Mono, monospace" font-size="14" font-weight="700" fill="#0ea5e9">Telegram</text>
+      <text x="940" y="178" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" fill="rgba(14,165,233,0.45)">phone · desktop</text>
+
+      <!-- Terminal node -->
+      <rect x="830" y="308" width="220" height="124" rx="16" fill="rgba(132,204,22,0.04)" stroke="#84cc16" stroke-width="2"/>
+      <text x="940" y="354" text-anchor="middle" font-family="Space Mono, monospace" font-size="28" fill="#84cc16">⌨</text>
+      <text x="940" y="386" text-anchor="middle" font-family="Space Mono, monospace" font-size="14" font-weight="700" fill="#84cc16">Terminal</text>
+      <text x="940" y="408" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" fill="rgba(132,204,22,0.45)">local TUI</text>
 
     </svg>
   </div>

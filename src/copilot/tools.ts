@@ -74,21 +74,18 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
           // Non-blocking: dispatch work and return immediately
           session.sendAndWait({
             prompt: `Working directory: ${args.working_dir}\n\n${args.initial_prompt}`,
-          }).then((result) => {
-            worker.status = "idle";
+          }, 300_000).then((result) => {
             worker.lastOutput = result?.data?.content || "No response";
-            db.prepare(
-              `UPDATE worker_sessions SET status = 'idle', last_output = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?`
-            ).run(worker.lastOutput, args.name);
             deps.onWorkerComplete(args.name, worker.lastOutput);
           }).catch((err) => {
-            worker.status = "error";
             const msg = err instanceof Error ? err.message : String(err);
             worker.lastOutput = msg;
-            db.prepare(
-              `UPDATE worker_sessions SET status = 'error', last_output = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?`
-            ).run(msg, args.name);
             deps.onWorkerComplete(args.name, `Error: ${msg}`);
+          }).finally(() => {
+            // Auto-destroy background workers after completion to free memory (~400MB per worker)
+            session.destroy().catch(() => {});
+            deps.workers.delete(args.name);
+            getDb().prepare(`DELETE FROM worker_sessions WHERE name = ?`).run(args.name);
           });
 
           return `Worker '${args.name}' created in ${args.working_dir}. Task dispatched — I'll notify you when it's done.`;
@@ -122,21 +119,18 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
         );
 
         // Non-blocking: dispatch work and return immediately
-        worker.session.sendAndWait({ prompt: args.prompt }).then((result) => {
-          worker.status = "idle";
+        worker.session.sendAndWait({ prompt: args.prompt }, 300_000).then((result) => {
           worker.lastOutput = result?.data?.content || "No response";
-          db.prepare(
-            `UPDATE worker_sessions SET status = 'idle', last_output = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?`
-          ).run(worker.lastOutput, args.name);
           deps.onWorkerComplete(args.name, worker.lastOutput);
         }).catch((err) => {
-          worker.status = "error";
           const msg = err instanceof Error ? err.message : String(err);
           worker.lastOutput = msg;
-          db.prepare(
-            `UPDATE worker_sessions SET status = 'error', last_output = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?`
-          ).run(msg, args.name);
           deps.onWorkerComplete(args.name, `Error: ${msg}`);
+        }).finally(() => {
+          // Auto-destroy after each send_to_worker dispatch to free memory
+          worker.session.destroy().catch(() => {});
+          deps.workers.delete(args.name);
+          getDb().prepare(`DELETE FROM worker_sessions WHERE name = ?`).run(args.name);
         });
 
         return `Task dispatched to worker '${args.name}'. I'll notify you when it's done.`;
