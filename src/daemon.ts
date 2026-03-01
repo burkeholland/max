@@ -103,8 +103,8 @@ export async function restartDaemon(): Promise<void> {
   try { await stopClient(); } catch { /* best effort */ }
   closeDb();
 
-  // Spawn a detached replacement process with the same args
-  const child = spawn(process.execPath, process.argv.slice(1), {
+  // Spawn a detached replacement process with the same args (include execArgv for tsx/loaders)
+  const child = spawn(process.execPath, [...process.execArgv, ...process.argv.slice(1)], {
     detached: true,
     stdio: "inherit",
     env: { ...process.env, MAX_RESTARTED: "1" },
