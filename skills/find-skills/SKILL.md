@@ -1,6 +1,6 @@
 ---
 name: find-skills
-description: Helps users discover and install agent skills when they ask questions like "how do I do X", "find a skill for X", "is there a skill that can...", or express interest in extending capabilities. This skill should be used when the user is looking for functionality that might exist as an installable skill.
+description: Helps users discover agent skills when they ask questions like "how do I do X", "find a skill for X", "is there a skill that can...", or express interest in extending capabilities. Always ask the user for permission before installing any skill, and flag security risks.
 ---
 
 # Find Skills
@@ -69,8 +69,9 @@ vercel-labs/agent-skills@vercel-react-best-practices
 When you find relevant skills, present them to the user with:
 
 1. The skill name and what it does
-2. The install command they can run
+2. Where it comes from (the repository/author)
 3. A link to learn more at skills.sh
+4. **Any security concerns** (see Security Review below)
 
 Example response:
 
@@ -78,21 +79,41 @@ Example response:
 I found a skill that might help! The "vercel-react-best-practices" skill provides
 React and Next.js performance optimization guidelines from Vercel Engineering.
 
-To install it:
-npx skills add vercel-labs/agent-skills@vercel-react-best-practices
-
 Learn more: https://skills.sh/vercel-labs/agent-skills/vercel-react-best-practices
+
+Want me to install it?
 ```
 
-### Step 4: Offer to Install
+### Step 4: Ask Permission Before Installing
 
-If the user wants to proceed, you can install the skill for them:
+**NEVER install a skill without explicit user confirmation.** Always present what you found, explain what it does, and ask "Want me to install it?" before proceeding.
+
+If the user confirms, install the skill:
 
 ```bash
-npx skills add <owner/repo@skill> -g -y
+npx skills add <owner/repo@skill> -g
 ```
 
-The `-g` flag installs globally (user-level) and `-y` skips confirmation prompts.
+The `-g` flag installs globally (user-level). Do NOT use `-y` — let the CLI prompt for confirmation as an extra safety check.
+
+### Security Review
+
+Before recommending any skill, evaluate it for security risks. Flag concerns to the user if the skill:
+
+- **Runs arbitrary shell commands** or executes code on the user's machine
+- **Accesses sensitive data** — credentials, API keys, SSH keys, personal files
+- **Makes network requests** to external services (data exfiltration risk)
+- **Requests broad filesystem access** beyond what the task requires
+- **Comes from an unknown or unverified source** — no stars, no established author
+- **Modifies system configuration** — environment variables, dotfiles, system settings
+
+When flagging a concern, be specific:
+
+```
+⚠️ Heads up — this skill runs shell commands and has access to your filesystem,
+which means it could read or modify files. The author (example-user) has a small
+GitHub presence. Want to proceed, or would you prefer I build a custom skill instead?
+```
 
 ## Common Skill Categories
 
