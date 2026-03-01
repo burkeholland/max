@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Max — Your AI daemon, built on GitHub Copilot</title>
-  <meta name="description" content="Max is a personal AI daemon built on the GitHub Copilot SDK. He lives on your machine, codes with full Copilot CLI sessions, learns skills, remembers everything, and never sleeps.">
+  <title>Max — Your personal AI developer assistant, built on GitHub Copilot</title>
+  <meta name="description" content="Max is a personal AI developer assistant built on the GitHub Copilot SDK. Runs 24/7 on your machine, handles coding while you sleep, learns any skill, and works with your existing Copilot subscription.">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800;900&display=swap');
 
@@ -722,9 +722,9 @@
 <section class="hero">
   <h1 class="hero-name">max<span class="dot">.</span></h1>
   <p class="hero-subtitle">
-    A personal developer daemon built on the <em>GitHub Copilot SDK</em>.<br>
-    Full Copilot CLI sessions as workers. Persistent memory.<br>
-    Learns new skills on the fly. Never sleeps.
+    Your personal AI developer assistant. Runs on your machine 24/7,<br>
+    built on the <em>GitHub Copilot SDK</em>. Handles coding while you<br>
+    sleep — and everything else too.
   </p>
   <div class="hero-cta">
     <code onclick="navigator.clipboard.writeText('curl -fsSL https://raw.githubusercontent.com/burkeholland/max/main/install.sh | bash')">curl -fsSL ...install.sh | bash</code>
@@ -743,36 +743,36 @@
     <div class="what-item fade-in">
       <span class="what-item-number">01</span>
       <div class="what-item-content">
-        <h3>Always on</h3>
-        <p><strong>Max runs as a daemon on your machine.</strong> Not a tab you close. Not a chat window. He's a persistent Node.js process powered by the Copilot SDK — running when you're coding, when you're on your phone, when you're asleep.</p>
+        <h3>Always running</h3>
+        <p><strong>Max is a persistent daemon on your machine.</strong> Not a tab you close. Not a chat window. He's always on — running when you're coding, when you're on your phone, when you're asleep.</p>
       </div>
     </div>
     <div class="what-item fade-in">
       <span class="what-item-number">02</span>
       <div class="what-item-content">
-        <h3>Real Copilot CLI sessions</h3>
-        <p><strong>Max spins up full Copilot CLI instances as workers.</strong> Need to fix a bug in ~/dev/myapp? Max creates a worker session — a real Copilot CLI with file access, terminal commands, the whole thing — dispatches the task, and notifies you when it's done. Multiple tasks, simultaneously.</p>
+        <h3>Codes while you're away</h3>
+        <p><strong>Max spins up real Copilot CLI sessions</strong> as workers. Dispatches tasks, works on your repos, and reports back to your phone. You can be walking your dog and a bug gets fixed.</p>
       </div>
     </div>
     <div class="what-item fade-in">
       <span class="what-item-number">03</span>
       <div class="what-item-content">
-        <h3>Persistent memory</h3>
-        <p><strong>Max remembers everything.</strong> His orchestrator runs in a single infinite session with automatic compaction — the SDK handles context management. Important facts are saved to long-term memory in SQLite. Preferences, project context, people, routines — he never forgets.</p>
+        <h3>GitHub-native</h3>
+        <p><strong>Integrated with GitHub out of the box.</strong> PRs, issues, branches, deploys — Max can do anything with your repos. No setup, no tokens to manage, just works.</p>
       </div>
     </div>
     <div class="what-item fade-in">
       <span class="what-item-number">04</span>
       <div class="what-item-content">
-        <h3>Machine awareness</h3>
-        <p><strong>Max can see every Copilot session on your machine</strong> — ones started from VS Code, from the terminal, from anywhere. He can attach to them, check on them, pick up where they left off.</p>
+        <h3>Learns any skill</h3>
+        <p><strong>Max pulls from <a href="https://skills.sh">skills.sh</a> — the open skills community library.</strong> Email, calendar, smart home, anything. If Max doesn't know how to do something, he can learn it instantly.</p>
       </div>
     </div>
     <div class="what-item fade-in">
       <span class="what-item-number">05</span>
       <div class="what-item-content">
-        <h3>Telegram + Terminal</h3>
-        <p><strong>Talk to Max from your phone or your terminal.</strong> Send a message from Telegram while you're walking your dog. Open a TUI when you're at your desk. Same Max, same memory, everywhere.</p>
+        <h3>Your Copilot subscription</h3>
+        <p><strong>No new accounts. No extra cost.</strong> Max works with the models you already have — Claude, GPT, Gemini, and more. Just your existing GitHub Copilot subscription.</p>
       </div>
     </div>
   </div>
@@ -783,16 +783,17 @@
 <section class="convo" id="convo">
   <div class="convo-header">// A conversation with Max</div>
 
-  <div class="msg fade-in"><span class="msg-who you">You</span><span class="msg-text"><strong>Check my email for anything urgent</strong></span></div>
-  <div class="msg fade-in"><span class="msg-who max">Max</span><span class="msg-text">I don't have a skill for email yet. Let me figure it out...</span></div>
-  <div class="msg fade-in"><span class="msg-who sys">Sys</span><span class="msg-text"><code>gog</code> found on system. Researching Gmail commands...</span></div>
-  <div class="msg fade-in"><span class="msg-who max">Max</span><span class="msg-text">Learned a new skill: <strong>Google (gogcli)</strong>. Checking your inbox now.</span></div>
-  <div class="msg fade-in"><span class="msg-who max">Max</span><span class="msg-text">You have <strong>3 unread</strong> — one from your manager about the deploy timeline, one from GitHub (PR approved), and a newsletter. Want me to open any of them?</span></div>
+  <div class="msg fade-in"><span class="msg-who you">You</span><span class="msg-text"><strong>Can you check my email for anything urgent?</strong></span></div>
+  <div class="msg fade-in"><span class="msg-who max">Max</span><span class="msg-text">I don't have a skill for email yet. What email do you use?</span></div>
+  <div class="msg fade-in"><span class="msg-who you">You</span><span class="msg-text"><strong>Gmail. Go ahead and install a skill for it.</strong></span></div>
+  <div class="msg fade-in"><span class="msg-who sys">Sys</span><span class="msg-text">Searching <code>skills.sh</code> for Gmail...</span></div>
+  <div class="msg fade-in"><span class="msg-who sys">Sys</span><span class="msg-text">Found <code>gogcli/gmail</code>. Installing...</span></div>
+  <div class="msg fade-in"><span class="msg-who max">Max</span><span class="msg-text">Installed. You have <strong>3 unread</strong> — one from your manager about the deploy timeline, one from GitHub (<strong>PR #42 approved</strong>), and a newsletter. Want me to open any?</span></div>
 
   <div class="msg-gap"></div>
 
   <div class="msg fade-in"><span class="msg-who you">You</span><span class="msg-text"><strong>Start working on the auth bug in ~/dev/myapp</strong></span></div>
-  <div class="msg fade-in"><span class="msg-who max">Max</span><span class="msg-text">On it — I'll spin up a worker and let you know.</span></div>
+  <div class="msg fade-in"><span class="msg-who max">Max</span><span class="msg-text">On it — spinning up a Copilot CLI session now.</span></div>
   <div class="msg fade-in"><span class="msg-who you">You</span><span class="msg-text"><strong>What's on my calendar today?</strong></span></div>
   <div class="msg fade-in"><span class="msg-who max">Max</span><span class="msg-text">You've got standup at 10, a 1:1 with Sarah at 2, and "Focus Time" blocked 3-5pm.</span></div>
   <div class="msg fade-in"><span class="msg-who sys">Sys</span><span class="msg-text"><code>[background]</code> Worker 'auth-fix' completed. Fixed the token refresh logic — the issue was an expired JWT not triggering re-auth.</span></div>
@@ -804,14 +805,14 @@
 <section class="skills-section" id="skills">
   <div class="skills-header">
     <h2>Skills<span>.</span></h2>
-    <p>Max learns by doing. Ask him something new and he'll figure it out, save the skill, and remember forever.</p>
+    <p>Max uses the open skills standard. Pull from the <a href="https://skills.sh">skills.sh</a> community library — or build your own. Anything Max doesn't know, he can learn instantly.</p>
   </div>
   <div class="skills-flow">
-    <span class="skill-tag-item">Gmail & Calendar <span class="skill-meta">ships with max</span></span>
-    <span class="skill-tag-item">Google Drive <span class="skill-meta">ships with max</span></span>
-    <span class="skill-tag-item">Smart Home <span class="skill-meta">learned on the fly</span></span>
-    <span class="skill-tag-item">Community Skills <span class="skill-meta">open source</span></span>
-    <span class="skill-tag-item">Web Search <span class="skill-meta">learned on the fly</span></span>
+    <span class="skill-tag-item">Gmail & Calendar <span class="skill-meta">gogcli/gmail</span></span>
+    <span class="skill-tag-item">GitHub <span class="skill-meta">PRs · issues · deploys</span></span>
+    <span class="skill-tag-item">Smart Home <span class="skill-meta">from skills.sh</span></span>
+    <span class="skill-tag-item">Web Browsing <span class="skill-meta">from skills.sh</span></span>
+    <span class="skill-tag-item">Community <span class="skill-meta">skills.sh library</span></span>
     <span class="skill-tag-item">Your Thing Here <span class="skill-meta">∞ possibilities</span></span>
   </div>
 </section>
@@ -849,19 +850,19 @@
 <section class="powered" id="powered">
   <div class="powered-header">
     <h2>Built on Copilot<span>.</span></h2>
-    <p>Max isn't a wrapper around an API. He's built directly on the <a href="https://github.com/github/copilot-sdk">GitHub Copilot SDK</a> — the same platform that powers Copilot in VS Code, the terminal, and GitHub.com. Every worker session is a real <a href="https://github.com/features/copilot/cli/">Copilot CLI</a> instance with full access to tools, files, and your terminal.</p>
+    <p>Max isn't a wrapper around an API. He's built directly on the <a href="https://github.com/github/copilot-sdk">GitHub Copilot SDK</a> — the same platform that powers Copilot in VS Code, the terminal, and GitHub.com. Every worker session is a real <a href="https://github.com/features/copilot/cli/">Copilot CLI</a> instance. Works with your existing Copilot subscription — no new accounts needed.</p>
   </div>
   <div class="powered-cols fade-in">
     <div class="powered-col">
       <h3>Copilot SDK</h3>
-      <p><strong>Streaming sessions, tool calling, infinite context.</strong> The SDK handles model selection, automatic context compaction, workspace persistence, and permission management. Max uses all of it.</p>
+      <p><strong>Streaming sessions, tool calling, infinite context.</strong> The SDK handles model selection, automatic context compaction, and session persistence. Max uses all of it — and you choose the model: Claude, GPT, Gemini, or any model in your Copilot subscription.</p>
       <p>Infinite sessions mean Max's conversation never hits a context wall — the SDK compacts intelligently in the background, preserving what matters.</p>
       <a href="https://docs.github.com/en/copilot/how-tos/copilot-sdk/sdk-getting-started" class="powered-link">SDK documentation ↗</a>
     </div>
     <div class="powered-col">
       <h3>Copilot CLI</h3>
       <p><strong>Every worker is a full Copilot CLI.</strong> That means real file editing, terminal commands, git operations, code search — the same agent that runs in your terminal, orchestrated by Max.</p>
-      <p>Max can also discover and attach to Copilot sessions started elsewhere — VS Code, your terminal, other tools. One daemon, aware of everything.</p>
+      <p>Because Max is built on this mature agent harness, he's not limited to code. Email, calendar, smart home, web browsing — if a Copilot CLI can do it, Max can do it too.</p>
       <a href="https://docs.github.com/en/copilot/how-tos/copilot-cli" class="powered-link">CLI documentation ↗</a>
     </div>
   </div>
@@ -872,7 +873,7 @@
 <section class="tools-section">
   <div class="tools-header">
     <h3>Built-in tools<span>.</span></h3>
-    <p>Max ships with tools for orchestration, memory, and self-management. No plugins needed.</p>
+    <p>Max ships with tools for orchestration, skills, and self-management. Extend with skills from skills.sh.</p>
   </div>
   <div class="tools-list">
     <div class="tool-cell fade-in">
@@ -889,11 +890,11 @@
     </div>
     <div class="tool-cell fade-in">
       <h4>Skills <code>learn_skill</code></h4>
-      <p>Ask Max to do something new. He researches CLI tools, writes a SKILL.md, and remembers how forever.</p>
+      <p>Pull skills from skills.sh or build your own. Email, calendar, smart home — Max learns anything instantly.</p>
     </div>
     <div class="tool-cell fade-in">
       <h4>Model Switching <code>switch_model</code></h4>
-      <p>Switch between any Copilot model by asking. "Use Claude." "Switch to GPT." Persisted across restarts.</p>
+      <p>Switch between any model in your Copilot subscription — Claude, GPT, Gemini, and more. Just ask. Persisted across restarts.</p>
     </div>
     <div class="tool-cell fade-in">
       <h4>Self-Management <code>restart_max</code></h4>
