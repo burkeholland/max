@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Max — Documentation</title>
-  <meta name="description" content="Documentation for Max, a personal AI daemon built on the GitHub Copilot SDK. Installation, configuration, commands, skills, memory, and architecture.">
+  <meta name="description" content="Documentation for Max, a personal AI assistant for developers built on the GitHub Copilot SDK. Installation, configuration, commands, skills, memory, and architecture.">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800;900&display=swap');
 
@@ -13,23 +13,32 @@
       --azure: #0ea5e9;
       --sage: #84cc16;
       --black: #111827;
-      --black-2: #0d1117;
       --white: #fafafa;
+      --cream: #f5f0e8;
       --gray: #4b5563;
-      --gray-border: #1f2937;
+      --gray-light: rgba(17,24,39,0.08);
+      --bg: #f0f5fb;
       --mono: 'Space Mono', monospace;
       --sans: 'Inter', -apple-system, sans-serif;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    ::selection { background: var(--coral); color: var(--black); }
+    ::selection { background: var(--coral); color: var(--white); }
     html { scroll-behavior: smooth; }
 
     body {
-      background: var(--black);
-      color: var(--white);
+      background: var(--bg);
+      color: var(--black);
       font-family: var(--sans);
       overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .gradient-text {
+      background: linear-gradient(135deg, var(--coral), var(--azure));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
 
     /* ── NAV ── */
@@ -38,61 +47,61 @@
       top: 0;
       width: 100%;
       z-index: 100;
-      padding: 1.5rem 2rem;
+      padding: 2rem 3rem;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      background: var(--black);
-      border-bottom: 1px solid var(--gray-border);
+      background: rgba(240, 245, 251, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
     }
     nav .wordmark {
       font-family: var(--mono);
-      font-size: 1.2rem;
+      font-size: 1.4rem;
       font-weight: 700;
-      color: var(--white);
+      color: var(--black);
       text-decoration: none;
-      letter-spacing: -0.02em;
+      letter-spacing: -0.05em;
     }
     nav .nav-links {
       display: flex;
-      gap: 2rem;
+      gap: 2.5rem;
       list-style: none;
     }
     nav .nav-links a {
-      font-family: var(--mono);
-      font-size: 0.8rem;
+      font-family: var(--sans);
+      font-size: 0.85rem;
       color: var(--gray);
       text-decoration: none;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
+      font-weight: 500;
       transition: color 0.2s;
     }
     nav .nav-links a:hover,
-    nav .nav-links a.active { color: var(--white); }
+    nav .nav-links a.active { color: var(--black); }
     nav .nav-links a.ext::after {
       content: ' ↗';
-      font-size: 0.65em;
-      opacity: 0.5;
+      font-size: 0.7em;
+      opacity: 0.4;
     }
 
     /* ── LAYOUT ── */
     .docs-layout {
       display: grid;
-      grid-template-columns: 220px 1fr;
+      grid-template-columns: 240px 1fr;
       max-width: 1200px;
       margin: 0 auto;
-      padding-top: 5rem;
+      padding-top: 6rem;
       min-height: 100vh;
     }
 
     /* ── SIDEBAR ── */
     .sidebar {
       position: sticky;
-      top: 5rem;
+      top: 6rem;
       align-self: start;
-      padding: 2rem 1.5rem;
-      border-right: 1px solid var(--gray-border);
-      height: calc(100vh - 5rem);
+      padding: 2.5rem 2rem;
+      border-right: 1px solid var(--gray-light);
+      height: calc(100vh - 6rem);
       overflow-y: auto;
     }
     .sidebar h4 {
@@ -102,7 +111,7 @@
       letter-spacing: 0.15em;
       color: var(--gray);
       margin-bottom: 0.75rem;
-      margin-top: 1.5rem;
+      margin-top: 2rem;
     }
     .sidebar h4:first-child { margin-top: 0; }
     .sidebar a {
@@ -110,10 +119,10 @@
       font-size: 0.85rem;
       color: var(--gray);
       text-decoration: none;
-      padding: 0.3rem 0;
+      padding: 0.35rem 0;
       transition: color 0.15s;
     }
-    .sidebar a:hover { color: var(--white); }
+    .sidebar a:hover { color: var(--black); }
     .sidebar a.active { color: var(--coral); }
 
     /* ── CONTENT ── */
@@ -128,6 +137,7 @@
       font-weight: 700;
       letter-spacing: -0.03em;
       margin-bottom: 0.5rem;
+      color: var(--black);
     }
     .docs-content h1 span { color: var(--coral); }
 
@@ -145,8 +155,9 @@
       letter-spacing: -0.02em;
       margin-top: 4rem;
       margin-bottom: 1.5rem;
-      padding-top: 1rem;
-      border-top: 1px solid var(--gray-border);
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--gray-light);
+      color: var(--black);
     }
     .docs-content h2 span { color: var(--azure); }
     .docs-content h2:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
@@ -157,7 +168,7 @@
       font-weight: 700;
       margin-top: 2.5rem;
       margin-bottom: 1rem;
-      color: var(--sage);
+      color: var(--coral);
     }
 
     .docs-content p {
@@ -167,7 +178,7 @@
       margin-bottom: 1rem;
     }
     .docs-content p strong {
-      color: var(--white);
+      color: var(--black);
       font-weight: 600;
     }
     .docs-content p a {
@@ -188,33 +199,34 @@
       color: var(--gray);
       margin-bottom: 0.4rem;
     }
-    .docs-content li strong { color: var(--white); font-weight: 600; }
+    .docs-content li strong { color: var(--black); font-weight: 600; }
     .docs-content li code {
       font-family: var(--mono);
       font-size: 0.85rem;
-      color: var(--sage);
-      background: rgba(132, 204, 22, 0.08);
+      color: var(--coral);
+      background: rgba(255, 127, 80, 0.08);
       padding: 0.15rem 0.4rem;
-      border-radius: 3px;
+      border-radius: 4px;
     }
 
     .docs-content code {
       font-family: var(--mono);
       font-size: 0.85rem;
-      color: var(--sage);
+      color: var(--coral);
     }
 
     /* code blocks */
     .code-block {
-      background: var(--black-2);
-      border: 1px solid var(--gray-border);
+      background: var(--white);
+      border: 1px solid var(--gray-light);
+      border-radius: 8px;
       overflow-x: auto;
       margin-bottom: 1.5rem;
     }
     .code-bar {
       padding: 0.5rem 1rem;
-      background: #161b22;
-      border-bottom: 1px solid var(--gray-border);
+      background: rgba(17,24,39,0.03);
+      border-bottom: 1px solid var(--gray-light);
       font-family: var(--mono);
       font-size: 0.7rem;
       color: var(--gray);
@@ -225,9 +237,11 @@
     .code-bar .dot {
       width: 8px; height: 8px;
       border-radius: 50%;
-      background: #374151;
       display: inline-block;
     }
+    .code-bar .dot:nth-child(1) { background: var(--coral); opacity: 0.6; }
+    .code-bar .dot:nth-child(2) { background: var(--sage); opacity: 0.6; }
+    .code-bar .dot:nth-child(3) { background: var(--azure); opacity: 0.6; }
     .code-bar .label { margin-left: auto; }
     .code-body {
       padding: 1.25rem 1.5rem;
@@ -238,8 +252,8 @@
       white-space: pre;
     }
     .code-body .prompt { color: var(--sage); }
-    .code-body .cmd { color: var(--white); }
-    .code-body .comment { color: #374151; }
+    .code-body .cmd { color: var(--black); }
+    .code-body .comment { color: #9ca3af; }
     .code-body .flag { color: var(--azure); }
     .code-body .str { color: var(--coral); }
 
@@ -248,7 +262,9 @@
       width: 100%;
       border-collapse: collapse;
       margin-bottom: 1.5rem;
-      border: 1px solid var(--gray-border);
+      border: 1px solid var(--gray-light);
+      border-radius: 8px;
+      overflow: hidden;
     }
     .cmd-table th {
       font-family: var(--mono);
@@ -257,20 +273,20 @@
       letter-spacing: 0.1em;
       text-align: left;
       padding: 0.75rem 1rem;
-      background: #161b22;
+      background: rgba(17,24,39,0.03);
       color: var(--gray);
-      border-bottom: 1px solid var(--gray-border);
+      border-bottom: 1px solid var(--gray-light);
     }
     .cmd-table td {
       padding: 0.6rem 1rem;
       font-size: 0.9rem;
       color: var(--gray);
-      border-bottom: 1px solid var(--gray-border);
+      border-bottom: 1px solid var(--gray-light);
     }
     .cmd-table td:first-child {
       font-family: var(--mono);
       font-size: 0.85rem;
-      color: var(--white);
+      color: var(--black);
       white-space: nowrap;
     }
     .cmd-table tr:last-child td { border-bottom: none; }
@@ -281,7 +297,7 @@
       letter-spacing: 0.05em;
       padding: 0.15rem 0.4rem;
       border: 1px solid;
-      border-radius: 2px;
+      border-radius: 100px;
       white-space: nowrap;
     }
     .cmd-table .tag-tui { color: var(--sage); border-color: var(--sage); }
@@ -292,17 +308,20 @@
       border-left: 3px solid var(--azure);
       padding: 1rem 1.5rem;
       margin-bottom: 1.5rem;
-      background: rgba(14, 165, 233, 0.05);
+      background: rgba(14, 165, 233, 0.06);
+      border-radius: 0 8px 8px 0;
     }
     .callout p { margin-bottom: 0; }
-    .callout.warn { border-color: var(--coral); background: rgba(255, 127, 80, 0.05); }
+    .callout.warn { border-color: var(--coral); background: rgba(255, 127, 80, 0.06); }
 
     /* env var table */
     .env-table {
       width: 100%;
       border-collapse: collapse;
       margin-bottom: 1.5rem;
-      border: 1px solid var(--gray-border);
+      border: 1px solid var(--gray-light);
+      border-radius: 8px;
+      overflow: hidden;
     }
     .env-table th {
       font-family: var(--mono);
@@ -311,21 +330,21 @@
       letter-spacing: 0.1em;
       text-align: left;
       padding: 0.75rem 1rem;
-      background: #161b22;
+      background: rgba(17,24,39,0.03);
       color: var(--gray);
-      border-bottom: 1px solid var(--gray-border);
+      border-bottom: 1px solid var(--gray-light);
     }
     .env-table td {
       padding: 0.6rem 1rem;
       font-size: 0.9rem;
       color: var(--gray);
-      border-bottom: 1px solid var(--gray-border);
+      border-bottom: 1px solid var(--gray-light);
       vertical-align: top;
     }
     .env-table td:first-child {
       font-family: var(--mono);
       font-size: 0.8rem;
-      color: var(--sage);
+      color: var(--coral);
       white-space: nowrap;
     }
     .env-table tr:last-child td { border-bottom: none; }
@@ -341,19 +360,19 @@
 
     /* ── FOOTER ── */
     footer {
-      padding: 4rem 2rem;
+      padding: 4rem 3rem;
       display: flex;
       justify-content: space-between;
       align-items: center;
       font-family: var(--mono);
       font-size: 0.75rem;
       color: var(--gray);
-      border-top: 1px solid var(--gray-border);
+      border-top: 1px solid var(--gray-light);
       max-width: 1200px;
       margin: 0 auto;
     }
     footer a {
-      color: var(--white);
+      color: var(--black);
       text-decoration: none;
     }
     footer a:hover { color: var(--coral); }
@@ -367,13 +386,14 @@
         position: static;
         height: auto;
         border-right: none;
-        border-bottom: 1px solid var(--gray-border);
+        border-bottom: 1px solid var(--gray-light);
         padding: 1.5rem 2rem;
       }
       .docs-content {
         padding: 2rem;
       }
-      nav .nav-links { gap: 1rem; }
+      nav { padding: 1.5rem 2rem; }
+      nav .nav-links { gap: 1.5rem; }
       .cmd-table, .env-table { font-size: 0.8rem; }
     }
   </style>
@@ -385,7 +405,7 @@
   <ul class="nav-links">
     <li><a href="index.html">Home</a></li>
     <li><a href="docs.html" class="active">Docs</a></li>
-    <li><a href="https://github.com/burkeholland/max">GitHub</a></li>
+    <li><a href="https://github.com/burkeholland/max" class="ext">GitHub</a></li>
     <li><a href="https://docs.github.com/en/copilot/how-tos/copilot-sdk/sdk-getting-started" class="ext">SDK Docs</a></li>
   </ul>
 </nav>
