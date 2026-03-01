@@ -80,7 +80,7 @@ if [ "$DEV_MODE" = true ]; then
   echo ""
   info "Running setup from local build..."
   echo ""
-  node dist/setup.js
+  node dist/setup.js < /dev/tty
 else
   info "Installing heymax..."
   npm install -g heymax
@@ -89,5 +89,5 @@ else
   echo ""
   info "Let's get Max configured..."
   echo ""
-  max setup
+  max setup < /dev/tty
 fi
