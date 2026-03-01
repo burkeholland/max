@@ -9,9 +9,10 @@ Max can interact with Google services using the `gog` CLI tool. This covers Gmai
 
 ## Prerequisites
 
-- `gog` must be installed: `brew install gogcli`
-- User must be authenticated: `gog login user@gmail.com`
-- Check auth status: `gog status`
+- `gog` must be installed: `brew install steipete/tap/gogcli`
+- OAuth credentials must be stored: `gog auth credentials ~/path/to/client_secret.json`
+- User must be authenticated: `gog auth add user@gmail.com`
+- Check auth status: `gog auth status`
 
 If `gog` is not installed or not authenticated, guide the user through setup.
 

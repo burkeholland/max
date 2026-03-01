@@ -60,7 +60,7 @@ if command -v copilot &>/dev/null; then
   echo -e "  ${GREEN}✓${RESET} Copilot CLI found"
 else
   warn "  ⚠ Copilot CLI not found — you'll need it before starting Max"
-  echo -e "    ${DIM}Install: npm install -g @anthropic-ai/copilot${RESET}"
+  echo -e "    ${DIM}Install: npm install -g @github/copilot${RESET}"
 fi
 
 # Check gogcli (optional — Google services)
@@ -68,7 +68,7 @@ if command -v gog &>/dev/null; then
   echo -e "  ${GREEN}✓${RESET} gogcli found (Google services)"
 else
   echo -e "  ${DIM}○ gogcli not found (optional — enables Gmail, Calendar, Drive, etc.)${RESET}"
-  echo -e "    ${DIM}Install: brew install gogcli${RESET}"
+  echo -e "    ${DIM}Install: brew install steipete/tap/gogcli${RESET}"
 fi
 
 echo ""

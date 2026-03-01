@@ -183,18 +183,33 @@ ${BOLD}╔═══════════════════════�
   if (setupGoogle) {
     // ── Step 1: Install gog CLI ──
     console.log(`\n${BOLD}Step 1: Install the gog CLI${RESET}\n`);
-    console.log(`  ${CYAN}brew install gogcli${RESET}     ${DIM}(macOS/Linux with Homebrew)${RESET}`);
-    console.log(`  ${CYAN}go install github.com/gogcli/gog@latest${RESET}  ${DIM}(with Go)${RESET}`);
+    console.log(`  ${CYAN}brew install steipete/tap/gogcli${RESET}     ${DIM}(macOS/Linux with Homebrew)${RESET}`);
     console.log();
 
     await ask(rl, `  ${DIM}Press Enter when installed (or to skip)...${RESET}`);
 
-    // ── Step 2: Authenticate ──
-    console.log(`\n${BOLD}Step 2: Authenticate with your Google account${RESET}\n`);
-    console.log(`  Run this command to log in:`);
-    console.log(`  ${CYAN}gog login your-email@gmail.com${RESET}`);
+    // ── Step 2: Create OAuth credentials ──
+    console.log(`\n${BOLD}Step 2: Create OAuth credentials${RESET}\n`);
+    console.log(`  You need a Google Cloud OAuth client to authenticate:`);
+    console.log(`  1. Go to ${CYAN}https://console.cloud.google.com/apis/credentials${RESET}`);
+    console.log(`  2. Create a project (if you don't have one)`);
+    console.log(`  3. Enable the APIs you want (Gmail, Calendar, Drive, etc.)`);
+    console.log(`  4. Configure the OAuth consent screen`);
+    console.log(`  5. Create an OAuth client (type: ${BOLD}Desktop app${RESET})`);
+    console.log(`  6. Download the JSON credentials file`);
     console.log();
-    console.log(`  This opens a browser to authorize gog. Once done, Max can`);
+    console.log(`  Then store the credentials:`);
+    console.log(`  ${CYAN}gog auth credentials ~/Downloads/client_secret_....json${RESET}`);
+    console.log();
+
+    await ask(rl, `  ${DIM}Press Enter when done (or to skip)...${RESET}`);
+
+    // ── Step 3: Authenticate ──
+    console.log(`\n${BOLD}Step 3: Authenticate with your Google account${RESET}\n`);
+    console.log(`  Run this command to authorize:`);
+    console.log(`  ${CYAN}gog auth add your-email@gmail.com${RESET}`);
+    console.log();
+    console.log(`  This opens a browser for OAuth authorization. Once done, Max can`);
     console.log(`  access your Google services on your behalf.`);
     console.log();
 
@@ -204,11 +219,11 @@ ${BOLD}╔═══════════════════════�
     );
 
     if (googleEmail.trim()) {
-      console.log(`\n  ${DIM}Run this now or later:${RESET}  ${CYAN}gog login ${googleEmail.trim()}${RESET}`);
-      console.log(`  ${DIM}Check status anytime:${RESET}   ${CYAN}gog status${RESET}`);
+      console.log(`\n  ${DIM}Run this now or later:${RESET}  ${CYAN}gog auth add ${googleEmail.trim()}${RESET}`);
+      console.log(`  ${DIM}Check status anytime:${RESET}   ${CYAN}gog auth status${RESET}`);
     }
 
-    console.log(`\n${GREEN}  ✓ Google skill is ready — authenticate with gog login when you're set.${RESET}\n`);
+    console.log(`\n${GREEN}  ✓ Google skill is ready — authenticate with gog auth add when you're set.${RESET}\n`);
   } else {
     console.log(`\n${DIM}  Skipping Google. You can always set it up later with: max setup${RESET}\n`);
   }
