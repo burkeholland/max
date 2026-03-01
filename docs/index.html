@@ -16,6 +16,7 @@
       --white: #fafafa;
       --cream: #f5f0e8;
       --gray: #4b5563;
+      --bg: #f0f5fb;
       --mono: 'Space Mono', monospace;
       --sans: 'Inter', -apple-system, sans-serif;
     }
@@ -24,30 +25,25 @@
 
     ::selection {
       background: var(--coral);
-      color: var(--black);
+      color: var(--white);
     }
 
     html { scroll-behavior: smooth; }
 
     body {
-      background: var(--black);
-      color: var(--white);
-      font-family: var(--mono);
+      background: var(--bg);
+      color: var(--black);
+      font-family: var(--sans);
       overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
     }
 
-    /* ── GRAIN TEXTURE ── */
-    .grain-section { position: relative; }
-    .grain-section::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      opacity: 0.055;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23g)'/%3E%3C/svg%3E");
-      pointer-events: none;
-      z-index: 1;
+    .gradient-text {
+      background: linear-gradient(135deg, var(--coral), var(--azure));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
-    .grain-section > * { position: relative; z-index: 2; }
 
     /* ── NAV ── */
     nav {
@@ -55,17 +51,19 @@
       top: 0;
       width: 100%;
       z-index: 100;
-      padding: 1.5rem 3rem;
+      padding: 2rem 3rem;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      mix-blend-mode: difference;
+      background: rgba(240, 245, 251, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
     }
     nav .wordmark {
       font-family: var(--mono);
-      font-size: 1.5rem;
+      font-size: 1.4rem;
       font-weight: 700;
-      color: var(--white);
+      color: var(--black);
       text-decoration: none;
       letter-spacing: -0.05em;
     }
@@ -75,20 +73,18 @@
       list-style: none;
     }
     nav .nav-links a {
-      font-family: var(--mono);
-      font-size: 0.75rem;
-      color: var(--white);
+      font-family: var(--sans);
+      font-size: 0.85rem;
+      color: var(--gray);
       text-decoration: none;
-      text-transform: uppercase;
-      letter-spacing: 0.15em;
-      font-weight: 700;
-      transition: opacity 0.2s;
+      font-weight: 500;
+      transition: color 0.2s;
     }
-    nav .nav-links a:hover { opacity: 0.6; }
+    nav .nav-links a:hover { color: var(--black); }
     nav .nav-links a.ext::after {
       content: ' ↗';
-      font-size: 0.65em;
-      opacity: 0.5;
+      font-size: 0.7em;
+      opacity: 0.4;
     }
 
     /* ── HERO ── */
@@ -96,609 +92,294 @@
       min-height: 100vh;
       display: flex;
       flex-direction: column;
-      justify-content: flex-end;
-      padding: 0 3rem 7rem;
-      position: relative;
-      background: var(--black);
-      overflow: hidden;
-    }
-
-    /* Top poster stripe */
-    .hero-stripe {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 48px;
-      display: flex;
-      z-index: 3;
-    }
-    .hero-stripe .hs-coral { flex: 3; background: var(--coral); }
-    .hero-stripe .hs-azure { flex: 2; background: var(--azure); }
-    .hero-stripe .hs-sage  { flex: 1; background: var(--sage); }
-
-    /* Giant ghosted year stamp — poster character */
-    .hero::before {
-      content: '2025';
-      position: absolute;
-      right: -0.05em;
-      bottom: -0.15em;
-      font-family: var(--mono);
-      font-size: clamp(16rem, 38vw, 44rem);
-      font-weight: 700;
-      color: rgba(255,255,255,0.025);
-      line-height: 1;
-      pointer-events: none;
-      letter-spacing: -0.06em;
-      z-index: 0;
+      justify-content: center;
+      padding: 8rem 3rem 6rem;
+      max-width: 1200px;
+      margin: 0 auto;
     }
 
     .hero-name {
       font-family: var(--mono);
-      font-size: clamp(9rem, 26vw, 26rem);
+      font-size: clamp(7rem, 20vw, 18rem);
       font-weight: 700;
-      line-height: 0.82;
-      letter-spacing: -0.07em;
-      color: var(--white);
-      text-transform: uppercase;
-      position: relative;
-      z-index: 2;
+      line-height: 0.85;
+      letter-spacing: -0.06em;
+      color: var(--black);
     }
-    .hero-name .dot { color: var(--coral); }
+    .hero-name .dot {
+      background: linear-gradient(135deg, var(--coral), var(--azure));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
 
     .hero-subtitle {
-      font-family: var(--mono);
-      font-size: clamp(0.8rem, 1.4vw, 1.1rem);
-      color: rgba(255,255,255,0.65);
+      font-family: var(--sans);
+      font-size: clamp(1rem, 1.8vw, 1.35rem);
+      color: var(--gray);
       margin-top: 3rem;
-      max-width: 44ch;
-      line-height: 2;
+      max-width: 52ch;
+      line-height: 1.8;
       font-weight: 400;
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      border-left: 5px solid var(--coral);
-      padding-left: 1.5rem;
-      position: relative;
-      z-index: 2;
     }
     .hero-subtitle em {
       font-style: normal;
-      color: var(--azure);
-      font-weight: 700;
+      color: var(--black);
+      font-weight: 600;
     }
 
     .hero-cta {
-      margin-top: 3.5rem;
+      margin-top: 3rem;
       display: flex;
-      gap: 1.5rem;
+      gap: 1.25rem;
       flex-wrap: wrap;
-      position: relative;
-      z-index: 2;
     }
     .hero-cta code {
       font-family: var(--mono);
-      font-size: 0.9rem;
-      padding: 1.2rem 2.5rem;
-      background: var(--coral);
-      border: 3px solid var(--coral);
-      color: var(--black);
+      font-size: 0.85rem;
+      padding: 0.9rem 2rem;
+      background: linear-gradient(135deg, var(--coral), var(--azure));
+      color: white;
+      border: none;
+      border-radius: 100px;
       cursor: pointer;
-      transition: all 0.1s;
+      transition: opacity 0.2s, transform 0.15s;
       display: inline-block;
       font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
     }
     .hero-cta code:hover {
-      transform: translate(-4px, -4px);
-      box-shadow: 7px 7px 0 var(--white);
+      opacity: 0.88;
+      transform: translateY(-1px);
     }
     .hero-cta .secondary {
       background: transparent;
-      border-color: rgba(255,255,255,0.25);
-      color: rgba(255,255,255,0.5);
+      border: 1.5px solid rgba(17,24,39,0.15);
+      color: var(--gray);
     }
     .hero-cta .secondary:hover {
-      border-color: var(--azure);
-      color: var(--azure);
-      box-shadow: 7px 7px 0 var(--azure);
+      border-color: var(--black);
+      color: var(--black);
+      opacity: 1;
     }
 
-    /* floating label */
     .hero-label {
-      position: absolute;
-      right: 3rem;
-      bottom: 9rem;
-      transform: rotate(90deg) translateX(50%);
-      transform-origin: right center;
-      font-family: var(--mono);
-      font-size: 0.62rem;
-      letter-spacing: 0.3em;
-      text-transform: uppercase;
-      color: rgba(255,255,255,0.18);
-      font-weight: 700;
-      z-index: 2;
+      display: none;
     }
 
-    /* ── COLOR BREAK ── */
-    .color-break {
-      display: flex;
-      height: 48px;
+    /* ── SECTION DIVIDER ── */
+    .section-rule {
+      max-width: 1200px;
+      margin: 0 auto;
+      border: none;
+      border-top: 1px solid rgba(17,24,39,0.08);
     }
-    .color-break .cb-coral { flex: 3; background: var(--coral); }
-    .color-break .cb-azure { flex: 2; background: var(--azure); }
-    .color-break .cb-sage  { flex: 1; background: var(--sage); }
 
     /* ── WHAT SECTION ── */
-    .what-section-wrap {
-      background: #0a0e17;
-    }
     .what {
-      padding: 8rem 3rem;
-      max-width: 1400px;
+      padding: 7rem 3rem;
+      max-width: 1200px;
       margin: 0 auto;
     }
     .what-heading-row {
       margin-bottom: 5rem;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-      padding-bottom: 4rem;
     }
     .what-heading-row h2 {
       font-family: var(--mono);
-      font-size: clamp(4.5rem, 12vw, 10rem);
+      font-size: clamp(3.5rem, 9vw, 7rem);
       font-weight: 700;
-      line-height: 0.85;
-      letter-spacing: -0.06em;
-      text-transform: uppercase;
-      color: var(--white);
+      line-height: 0.9;
+      letter-spacing: -0.05em;
+      color: var(--black);
     }
-    .what-heading-row h2 span { color: var(--sage); }
+    .what-heading-row h2 span {
+      background: linear-gradient(135deg, var(--coral), var(--azure));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
 
     .what-right {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 0;
     }
     .what-item {
-      padding: 3.5rem 4rem;
-      background: #111827;
+      padding: 3.5rem 0;
       display: grid;
-      grid-template-columns: 100px 1fr;
-      gap: 3.5rem;
+      grid-template-columns: 120px 1fr;
+      gap: 3rem;
       align-items: start;
-      border-left: none;
-      position: relative;
+      border-bottom: 1px solid rgba(17,24,39,0.06);
     }
-    .what-item:nth-child(even) { background: #0d1117; }
+    .what-item:last-child { border-bottom: none; }
 
     .what-item-number {
       font-family: var(--mono);
-      font-size: 3.5rem;
+      font-size: 4.5rem;
       font-weight: 700;
       line-height: 1;
       letter-spacing: -0.04em;
-      padding-top: 0.15rem;
+      background: linear-gradient(135deg, var(--coral), var(--azure));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
-    .what-item:nth-child(1) .what-item-number { color: var(--coral); }
-    .what-item:nth-child(2) .what-item-number { color: var(--azure); }
-    .what-item:nth-child(3) .what-item-number { color: var(--sage); }
-    .what-item:nth-child(4) .what-item-number { color: var(--coral); }
-    .what-item:nth-child(5) .what-item-number { color: var(--azure); }
 
     .what-item-content h3 {
-      font-family: var(--mono);
-      font-size: clamp(1.4rem, 2.2vw, 1.9rem);
+      font-family: var(--sans);
+      font-size: clamp(1.3rem, 2vw, 1.65rem);
       font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: -0.03em;
-      color: var(--white);
-      margin-bottom: 1.2rem;
+      color: var(--black);
+      margin-bottom: 0.9rem;
+      letter-spacing: -0.02em;
     }
     .what-item-content p {
-      font-family: var(--mono);
-      font-size: 0.92rem;
-      line-height: 1.95;
+      font-family: var(--sans);
+      font-size: 1rem;
+      line-height: 1.85;
       color: var(--gray);
+      max-width: 60ch;
     }
     .what-item-content p strong {
-      color: var(--white);
-      font-weight: 700;
+      color: var(--black);
+      font-weight: 600;
     }
 
     /* ── CONVERSATION ── */
-    .convo-section-wrap {
-      background: var(--azure);
-    }
     .convo {
-      padding: 8rem 3rem;
-      max-width: 900px;
+      padding: 7rem 3rem;
+      max-width: 780px;
       margin: 0 auto;
     }
     .convo-header {
       font-family: var(--mono);
-      font-size: 0.72rem;
+      font-size: 0.75rem;
       text-transform: uppercase;
-      letter-spacing: 0.22em;
-      color: rgba(0,0,0,0.45);
-      margin-bottom: 3rem;
+      letter-spacing: 0.18em;
+      color: rgba(17,24,39,0.3);
+      margin-bottom: 3.5rem;
       font-weight: 700;
     }
     .msg {
-      margin-bottom: 2rem;
+      margin-bottom: 2.2rem;
       display: flex;
-      gap: 1rem;
+      gap: 1.5rem;
       align-items: flex-start;
     }
     .msg-who {
       font-family: var(--mono);
-      font-size: 0.72rem;
+      font-size: 0.7rem;
       font-weight: 700;
       text-transform: uppercase;
-      min-width: 4rem;
-      padding-top: 0.3rem;
+      min-width: 3.5rem;
+      padding-top: 0.35rem;
       flex-shrink: 0;
+      letter-spacing: 0.04em;
     }
-    .msg-who.you { color: #054872; }
-    .msg-who.max { color: #7a2900; }
-    .msg-who.sys { color: #2e5800; }
+    .msg-who.you { color: var(--azure); }
+    .msg-who.max { color: var(--coral); }
+    .msg-who.sys { color: var(--sage); }
     .msg-text {
-      font-size: 1rem;
-      line-height: 1.75;
-      color: rgba(0,0,0,0.72);
+      font-family: var(--sans);
+      font-size: 1.05rem;
+      line-height: 1.8;
+      color: var(--gray);
     }
-    .msg-text strong { color: var(--black); font-weight: 700; }
+    .msg-text strong { color: var(--black); font-weight: 600; }
     .msg-text code {
       font-family: var(--mono);
-      font-size: 0.88rem;
-      color: #2e5800;
+      font-size: 0.9rem;
+      color: var(--azure);
     }
     .msg-gap {
-      border-top: 2px solid rgba(0,0,0,0.15);
+      border-top: 1px solid rgba(17,24,39,0.06);
       margin: 3rem 0;
     }
 
     /* ── SKILLS ── */
     .skills-section {
-      padding: 8rem 3rem;
-      max-width: 1400px;
+      padding: 7rem 3rem;
+      max-width: 1200px;
       margin: 0 auto;
     }
     .skills-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      margin-bottom: 5rem;
-      flex-wrap: wrap;
-      gap: 2rem;
+      margin-bottom: 3.5rem;
     }
     .skills-header h2 {
       font-family: var(--mono);
-      font-size: clamp(4rem, 9vw, 7rem);
+      font-size: clamp(3.5rem, 9vw, 7rem);
       font-weight: 700;
-      line-height: 0.88;
+      line-height: 0.9;
       letter-spacing: -0.05em;
-      text-transform: uppercase;
+      color: var(--black);
     }
-    .skills-header h2 span { color: var(--azure); }
+    .skills-header h2 span {
+      background: linear-gradient(135deg, var(--coral), var(--azure));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
     .skills-header p {
-      font-size: 0.82rem;
+      font-family: var(--sans);
+      font-size: 1.05rem;
       color: var(--gray);
-      max-width: 34ch;
-      text-align: right;
-      line-height: 1.9;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
+      max-width: 50ch;
+      line-height: 1.8;
+      margin-top: 1.5rem;
     }
 
-    /* Index cards pinned to a board */
-    .skills-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-      gap: 2.5rem;
+    .skills-flow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    .skill-tag-item {
+      font-family: var(--sans);
+      font-size: 1rem;
+      font-weight: 500;
+      padding: 0.65rem 1.5rem;
+      border-radius: 100px;
+      border: 1.5px solid rgba(17,24,39,0.1);
+      color: var(--black);
       background: transparent;
-      border: none;
-      padding: 1.5rem;
+      transition: all 0.2s;
+      cursor: default;
     }
-    .skill-cell {
-      background: var(--cream);
-      padding: 2.2rem 2rem 2rem;
-      color: var(--black);
-      box-shadow: 5px 5px 0 rgba(0,0,0,0.45);
-      transition: transform 0.18s ease, box-shadow 0.18s ease;
-      position: relative;
+    .skill-tag-item:hover {
+      border-color: transparent;
+      background: linear-gradient(135deg, var(--coral), var(--azure));
+      color: white;
     }
-    .skill-cell:nth-child(1)  { transform: rotate(-1.6deg); }
-    .skill-cell:nth-child(2)  { transform: rotate(0.9deg); }
-    .skill-cell:nth-child(3)  { transform: rotate(-0.7deg); }
-    .skill-cell:nth-child(4)  { transform: rotate(1.4deg); }
-    .skill-cell:nth-child(5)  { transform: rotate(-1.1deg); }
-    .skill-cell:nth-child(6)  { transform: rotate(0.6deg); }
-    .skill-cell:hover {
-      transform: rotate(0deg) scale(1.04) translateY(-5px) !important;
-      box-shadow: 9px 9px 0 rgba(0,0,0,0.5);
-      z-index: 5;
-    }
-    /* Pushpin dot */
-    .skill-cell::before {
-      content: '';
-      position: absolute;
-      top: -10px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      background: var(--coral);
-      box-shadow: 0 2px 6px rgba(0,0,0,0.5), inset 0 -2px 4px rgba(0,0,0,0.2);
-    }
-    .skill-cell:nth-child(even)::before { background: var(--azure); }
-    .skill-cell:nth-child(3n)::before   { background: var(--sage); }
-
-    .skill-cell h3 {
-      font-family: var(--mono);
-      font-size: 0.95rem;
-      font-weight: 700;
-      margin-bottom: 0.75rem;
-      color: var(--black);
-      text-transform: uppercase;
-      letter-spacing: -0.01em;
-    }
-    .skill-cell p {
-      font-size: 0.78rem;
-      color: #3d3020;
-      line-height: 1.7;
-      font-family: var(--mono);
-    }
-    .skill-cell .skill-tag {
-      display: inline-block;
-      margin-top: 1rem;
-      font-family: var(--mono);
-      font-size: 0.58rem;
-      text-transform: uppercase;
-      letter-spacing: 0.13em;
-      padding: 0.2rem 0.5rem;
-      border: 1.5px solid;
-    }
-    .skill-cell .skill-tag.built-in  { color: #256600; border-color: #256600; }
-    .skill-cell .skill-tag.community { color: #004fa0; border-color: #004fa0; }
-    .skill-cell .skill-tag.custom    { color: #9a2c00; border-color: #9a2c00; }
-
-    /* ── POWERED BY ── */
-    .powered {
-      padding: 8rem 3rem;
-      max-width: 1400px;
-      margin: 0 auto;
-    }
-    .powered-header {
-      margin-bottom: 4rem;
-    }
-    .powered-header h2 {
-      font-family: var(--mono);
-      font-size: clamp(3rem, 7vw, 6rem);
-      font-weight: 700;
-      line-height: 0.88;
-      letter-spacing: -0.05em;
-      text-transform: uppercase;
-    }
-    .powered-header h2 span { color: var(--coral); }
-    .powered-header p {
-      font-size: 1rem;
+    .skill-tag-item .skill-meta {
+      font-size: 0.72rem;
       color: var(--gray);
-      max-width: 65ch;
-      line-height: 1.8;
-      margin-top: 2rem;
-    }
-    .powered-header p a {
-      color: var(--azure);
-      text-decoration: none;
-      border-bottom: 1px solid transparent;
-      transition: border-color 0.2s;
-    }
-    .powered-header p a:hover { border-color: var(--azure); }
-    .powered-cols {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 2px;
-      background: #1f2937;
-      border: 1px solid #1f2937;
-    }
-    .powered-col {
-      background: var(--black);
-      padding: 3rem;
-    }
-    .powered-col h3 {
-      font-family: var(--mono);
-      font-size: 0.78rem;
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-      margin-bottom: 1.5rem;
-      font-weight: 700;
-    }
-    .powered-col:first-child h3 { color: var(--azure); }
-    .powered-col:last-child h3  { color: var(--sage); }
-    .powered-col p {
-      font-size: 0.95rem;
-      color: var(--gray);
-      line-height: 1.8;
-      margin-bottom: 1rem;
-    }
-    .powered-col p strong { color: var(--white); font-weight: 700; }
-    .powered-col .powered-link {
-      font-family: var(--mono);
-      font-size: 0.78rem;
-      color: var(--white);
-      text-decoration: none;
-      border-bottom: 1px solid var(--gray);
-      transition: border-color 0.2s;
-      display: inline-block;
-      margin-top: 0.5rem;
-    }
-    .powered-col .powered-link:hover { border-color: var(--white); }
-
-    /* ── TOOLS ── */
-    .tools-section {
-      padding: 4rem 3rem 8rem;
-      max-width: 1400px;
-      margin: 0 auto;
-    }
-    .tools-header {
-      margin-bottom: 3rem;
-    }
-    .tools-header h3 {
-      font-family: var(--mono);
-      font-size: clamp(2rem, 4vw, 3.5rem);
-      font-weight: 700;
-      letter-spacing: -0.04em;
-      text-transform: uppercase;
-    }
-    .tools-header h3 span { color: var(--sage); }
-    .tools-header p {
-      font-size: 0.9rem;
-      color: var(--gray);
-      margin-top: 1rem;
-      max-width: 55ch;
-      line-height: 1.7;
-    }
-    .tools-list {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 1px;
-      background: #1f2937;
-      border: 1px solid #1f2937;
-    }
-    .tool-cell {
-      background: var(--black);
-      padding: 2rem;
-      transition: background 0.2s;
-    }
-    .tool-cell:hover { background: #1a1f2e; }
-    .tool-cell h4 {
-      font-family: var(--mono);
-      font-size: 0.88rem;
-      font-weight: 700;
-      margin-bottom: 0.5rem;
-      color: var(--white);
-      text-transform: uppercase;
-      letter-spacing: -0.01em;
-    }
-    .tool-cell h4 code {
+      margin-left: 0.5rem;
       font-weight: 400;
-      font-size: 0.76rem;
-      color: var(--sage);
-      text-transform: none;
     }
-    .tool-cell p {
-      font-size: 0.82rem;
-      color: var(--gray);
-      line-height: 1.6;
+    .skill-tag-item:hover .skill-meta {
+      color: rgba(255,255,255,0.7);
     }
 
-    /* ── INSTALL ── */
-    .install-section-wrap {
-      background: var(--coral);
-    }
-    .install {
-      padding: 8rem 3rem;
-      text-align: center;
-      max-width: 860px;
+    /* ── ARCH ── */
+    .arch {
+      padding: 7rem 3rem;
+      max-width: 1200px;
       margin: 0 auto;
     }
-    .install h2 {
-      font-family: var(--mono);
-      font-size: clamp(5rem, 14vw, 11rem);
-      font-weight: 700;
-      margin-bottom: 4rem;
-      letter-spacing: -0.06em;
-      line-height: 0.85;
-      color: var(--black);
-      text-transform: uppercase;
-    }
-    .install-block {
-      max-width: 700px;
-      margin: 0 auto;
-      text-align: left;
-      background: var(--black);
-      border: none;
-      overflow: hidden;
-      box-shadow: 8px 8px 0 rgba(0,0,0,0.25);
-    }
-    .install-bar {
-      padding: 0.75rem 1rem;
-      background: #161b22;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      border-bottom: 1px solid #1f2937;
-    }
-    .install-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: #374151;
-    }
-    .install-bar span {
-      font-family: var(--mono);
-      font-size: 0.7rem;
-      color: var(--gray);
-      margin-left: auto;
-    }
-    .install-body {
-      padding: 2rem;
-    }
-    .install-line {
-      font-family: var(--mono);
-      font-size: clamp(0.8rem, 1.5vw, 1rem);
-      line-height: 2;
-      color: var(--gray);
-    }
-    .install-line .prompt  { color: var(--sage); }
-    .install-line .cmd     { color: var(--white); }
-    .install-line .comment { color: #374151; }
-    .install-line .url     { color: var(--azure); }
-
-    .install-steps {
-      max-width: 700px;
-      margin: 3rem auto 0;
-      display: flex;
-      gap: 0;
-    }
-    .install-step {
-      flex: 1;
-      padding: 1.5rem;
-      border-top: 5px solid rgba(0,0,0,0.25);
-    }
-    .install-step:nth-child(1) { border-color: var(--black); }
-    .install-step:nth-child(2) { border-color: var(--black); }
-    .install-step:nth-child(3) { border-color: var(--black); }
-    .install-step .step-num {
-      font-family: var(--mono);
-      font-size: 0.7rem;
-      color: rgba(0,0,0,0.45);
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-    }
-    .install-step p {
-      font-size: 1rem;
-      margin-top: 0.5rem;
-      color: var(--black);
-      font-weight: 700;
-      text-transform: uppercase;
-    }
-    .install-step code {
-      font-family: var(--mono);
-      font-size: 0.8rem;
-      color: rgba(0,0,0,0.55);
-    }
-
     .arch h2 {
       font-family: var(--mono);
       font-size: clamp(2.5rem, 5vw, 4.5rem);
       font-weight: 700;
       margin-bottom: 3rem;
       letter-spacing: -0.04em;
-      text-transform: uppercase;
+      color: var(--black);
     }
-    .arch h2 span { color: var(--sage); }
+    .arch h2 span {
+      background: linear-gradient(135deg, var(--coral), var(--azure));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
     .arch-diagram {
       font-family: var(--mono);
       font-size: clamp(0.7rem, 1.2vw, 0.9rem);
@@ -711,7 +392,213 @@
     .arch-diagram .hi-coral { color: var(--coral); }
     .arch-diagram .hi-azure { color: var(--azure); }
     .arch-diagram .hi-sage  { color: var(--sage); }
-    .arch-diagram .hi-white { color: var(--white); }
+    .arch-diagram .hi-white { color: var(--black); }
+
+    /* ── POWERED BY ── */
+    .powered {
+      padding: 7rem 3rem;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .powered-header {
+      margin-bottom: 4rem;
+    }
+    .powered-header h2 {
+      font-family: var(--mono);
+      font-size: clamp(3rem, 7vw, 6rem);
+      font-weight: 700;
+      line-height: 0.9;
+      letter-spacing: -0.05em;
+      color: var(--black);
+    }
+    .powered-header h2 span {
+      background: linear-gradient(135deg, var(--coral), var(--azure));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .powered-header p {
+      font-family: var(--sans);
+      font-size: 1.05rem;
+      color: var(--gray);
+      max-width: 65ch;
+      line-height: 1.85;
+      margin-top: 2rem;
+    }
+    .powered-header p a {
+      color: var(--azure);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.2s;
+    }
+    .powered-header p a:hover { border-color: var(--azure); }
+    .powered-cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4rem;
+    }
+    .powered-col h3 {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      margin-bottom: 1.5rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--coral), var(--azure));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .powered-col p {
+      font-family: var(--sans);
+      font-size: 1rem;
+      color: var(--gray);
+      line-height: 1.85;
+      margin-bottom: 1rem;
+    }
+    .powered-col p strong { color: var(--black); font-weight: 600; }
+    .powered-col .powered-link {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: var(--black);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(17,24,39,0.15);
+      transition: border-color 0.2s;
+      display: inline-block;
+      margin-top: 0.5rem;
+    }
+    .powered-col .powered-link:hover { border-color: var(--black); }
+
+    /* ── TOOLS ── */
+    .tools-section {
+      padding: 0 3rem 7rem;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .tools-header {
+      margin-bottom: 3rem;
+    }
+    .tools-header h3 {
+      font-family: var(--mono);
+      font-size: clamp(2rem, 4vw, 3.5rem);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      color: var(--black);
+    }
+    .tools-header h3 span {
+      background: linear-gradient(135deg, var(--coral), var(--azure));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .tools-header p {
+      font-family: var(--sans);
+      font-size: 1rem;
+      color: var(--gray);
+      margin-top: 1rem;
+      max-width: 55ch;
+      line-height: 1.8;
+    }
+    .tools-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .tool-cell {
+      padding: 2rem 0;
+      border-bottom: 1px solid rgba(17,24,39,0.06);
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 2rem;
+      align-items: baseline;
+    }
+    .tool-cell:last-child { border-bottom: none; }
+    .tool-cell h4 {
+      font-family: var(--sans);
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--black);
+    }
+    .tool-cell h4 code {
+      font-family: var(--mono);
+      font-weight: 400;
+      font-size: 0.78rem;
+      color: var(--azure);
+    }
+    .tool-cell p {
+      font-family: var(--sans);
+      font-size: 0.95rem;
+      color: var(--gray);
+      line-height: 1.7;
+    }
+
+    /* ── INSTALL ── */
+    .install {
+      padding: 7rem 3rem;
+      text-align: center;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .install h2 {
+      font-family: var(--mono);
+      font-size: clamp(4rem, 12vw, 9rem);
+      font-weight: 700;
+      margin-bottom: 3.5rem;
+      letter-spacing: -0.06em;
+      line-height: 0.9;
+      color: var(--black);
+    }
+    .install-cmd {
+      font-family: var(--mono);
+      font-size: clamp(0.9rem, 1.8vw, 1.3rem);
+      color: var(--gray);
+      margin-bottom: 1rem;
+      letter-spacing: -0.01em;
+    }
+    .install-cmd .prompt {
+      color: var(--coral);
+    }
+    .install-cmd .cmd {
+      color: var(--black);
+      font-weight: 700;
+    }
+    .install-cmd .url {
+      color: var(--azure);
+    }
+    .install-cmd .comment {
+      color: rgba(17,24,39,0.25);
+    }
+
+    .install-steps {
+      max-width: 700px;
+      margin: 4rem auto 0;
+      display: flex;
+      gap: 0;
+    }
+    .install-step {
+      flex: 1;
+      padding: 1.5rem;
+      border-top: 1px solid rgba(17,24,39,0.08);
+    }
+    .install-step .step-num {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: rgba(17,24,39,0.25);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .install-step p {
+      font-family: var(--sans);
+      font-size: 1rem;
+      margin-top: 0.5rem;
+      color: var(--black);
+      font-weight: 700;
+    }
+    .install-step code {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--gray);
+    }
 
     /* ── FOOTER ── */
     footer {
@@ -719,36 +606,41 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-family: var(--mono);
-      font-size: 0.75rem;
+      font-family: var(--sans);
+      font-size: 0.82rem;
       color: var(--gray);
-      border-top: 1px solid #1f2937;
-      max-width: 1400px;
+      border-top: 1px solid rgba(17,24,39,0.08);
+      max-width: 1200px;
       margin: 0 auto;
     }
     footer a {
-      color: var(--white);
+      color: var(--black);
       text-decoration: none;
     }
     footer a:hover { color: var(--coral); }
 
     /* ── RESPONSIVE ── */
     @media (max-width: 768px) {
+      nav { padding: 1.5rem 1.5rem; }
+      .hero { padding: 7rem 1.5rem 4rem; }
+      .what, .convo, .skills-section, .arch, .powered, .tools-section, .install {
+        padding-left: 1.5rem;
+        padding-right: 1.5rem;
+      }
       .what-item {
         grid-template-columns: 72px 1fr;
         gap: 1.5rem;
-        padding: 2.5rem 1.5rem;
+        padding: 2.5rem 0;
       }
-      .what-item-number { font-size: 2.8rem; }
+      .what-item-number { font-size: 3rem; }
       .hero-label { display: none; }
       nav .nav-links { gap: 1rem; }
       .install-steps { flex-direction: column; }
       .skills-header { flex-direction: column; align-items: flex-start; }
-      .skills-header p { text-align: left; }
       .arch-diagram { font-size: 0.6rem; }
       .msg { flex-direction: column; gap: 0.25rem; }
-      .powered-cols { grid-template-columns: 1fr; }
-      .skills-grid { gap: 2.5rem; padding: 1rem; }
+      .powered-cols { grid-template-columns: 1fr; gap: 3rem; }
+      .tool-cell { grid-template-columns: 1fr; gap: 0.5rem; }
     }
 
     /* ── ANIMATIONS ── */
@@ -780,11 +672,6 @@
 </nav>
 
 <section class="hero">
-  <div class="hero-stripe">
-    <div class="hs-coral"></div>
-    <div class="hs-azure"></div>
-    <div class="hs-sage"></div>
-  </div>
   <h1 class="hero-name">max<span class="dot">.</span></h1>
   <p class="hero-subtitle">
     A personal developer daemon built on the <em>GitHub Copilot SDK</em>.<br>
@@ -798,13 +685,8 @@
   <span class="hero-label">built on github copilot sdk</span>
 </section>
 
-<div class="color-break">
-  <div class="cb-coral"></div>
-  <div class="cb-azure"></div>
-  <div class="cb-sage"></div>
-</div>
+<hr class="section-rule">
 
-<div class="what-section-wrap">
 <section class="what" id="what">
   <div class="what-heading-row">
     <h2>Not a<br>chatbot<span>.</span></h2>
@@ -847,15 +729,9 @@
     </div>
   </div>
 </section>
-</div>
 
-<div class="color-break">
-  <div class="cb-sage"></div>
-  <div class="cb-coral"></div>
-  <div class="cb-azure"></div>
-</div>
+<hr class="section-rule">
 
-<div class="convo-section-wrap grain-section">
 <section class="convo" id="convo">
   <div class="convo-header">// A conversation with Max</div>
 
@@ -874,52 +750,25 @@
   <div class="msg fade-in"><span class="msg-who sys">Sys</span><span class="msg-text"><code>[background]</code> Worker 'auth-fix' completed. Fixed the token refresh logic — the issue was an expired JWT not triggering re-auth.</span></div>
   <div class="msg fade-in"><span class="msg-who max">Max</span><span class="msg-text"><strong>Auth bug is fixed.</strong> The token refresh wasn't catching expired JWTs. Want me to push a PR?</span></div>
 </section>
-</div>
+
+<hr class="section-rule">
 
 <section class="skills-section" id="skills">
   <div class="skills-header">
     <h2>Skills<span>.</span></h2>
     <p>Max learns by doing. Ask him something new and he'll figure it out, save the skill, and remember forever.</p>
   </div>
-  <div class="skills-grid">
-    <div class="skill-cell">
-      <h3>Gmail & Calendar</h3>
-      <p>Read, send, search email. Check calendar, create events, find conflicts.</p>
-      <span class="skill-tag built-in">ships with max</span>
-    </div>
-    <div class="skill-cell">
-      <h3>Google Drive</h3>
-      <p>List, search, upload, download, share files and folders.</p>
-      <span class="skill-tag built-in">ships with max</span>
-    </div>
-    <div class="skill-cell">
-      <h3>Smart Home</h3>
-      <p>"Turn off the living room lights." Max finds the CLI tool and learns it.</p>
-      <span class="skill-tag custom">learned on the fly</span>
-    </div>
-    <div class="skill-cell">
-      <h3>Community Skills</h3>
-      <p>Open source skill library. Say "find me a skill for X" and Max installs it.</p>
-      <span class="skill-tag community">open source</span>
-    </div>
-    <div class="skill-cell">
-      <h3>Web Search</h3>
-      <p>Search the web, summarize results, pull specific information.</p>
-      <span class="skill-tag custom">learned on the fly</span>
-    </div>
-    <div class="skill-cell">
-      <h3>Your Thing Here</h3>
-      <p>Just say "learn how to ___" and Max will research it, build a skill, and do it.</p>
-      <span class="skill-tag custom">∞ possibilities</span>
-    </div>
+  <div class="skills-flow">
+    <span class="skill-tag-item">Gmail & Calendar <span class="skill-meta">ships with max</span></span>
+    <span class="skill-tag-item">Google Drive <span class="skill-meta">ships with max</span></span>
+    <span class="skill-tag-item">Smart Home <span class="skill-meta">learned on the fly</span></span>
+    <span class="skill-tag-item">Community Skills <span class="skill-meta">open source</span></span>
+    <span class="skill-tag-item">Web Search <span class="skill-meta">learned on the fly</span></span>
+    <span class="skill-tag-item">Your Thing Here <span class="skill-meta">∞ possibilities</span></span>
   </div>
 </section>
 
-<div class="color-break">
-  <div class="cb-azure"></div>
-  <div class="cb-sage"></div>
-  <div class="cb-coral"></div>
-</div>
+<hr class="section-rule">
 
 <section class="arch">
   <h2>How it works<span>.</span></h2>
@@ -947,11 +796,7 @@
 <span class="hi-sage">Terminal</span> ─────────┘</div>
 </section>
 
-<div class="color-break">
-  <div class="cb-azure"></div>
-  <div class="cb-coral"></div>
-  <div class="cb-sage"></div>
-</div>
+<hr class="section-rule">
 
 <section class="powered" id="powered">
   <div class="powered-header">
@@ -973,6 +818,8 @@
     </div>
   </div>
 </section>
+
+<hr class="section-rule">
 
 <section class="tools-section">
   <div class="tools-header">
@@ -1007,30 +854,16 @@
   </div>
 </section>
 
-<div class="color-break">
-  <div class="cb-sage"></div>
-  <div class="cb-azure"></div>
-  <div class="cb-coral"></div>
-</div>
+<hr class="section-rule">
 
-<div class="install-section-wrap grain-section">
 <section class="install" id="install">
   <h2>Get Max.</h2>
-  <div class="install-block">
-    <div class="install-bar">
-      <div class="install-dot"></div>
-      <div class="install-dot"></div>
-      <div class="install-dot"></div>
-      <span>~</span>
-    </div>
-    <div class="install-body">
-      <div class="install-line"><span class="comment"># one line install</span></div>
-      <div class="install-line"><span class="prompt">$</span> <span class="cmd">curl -fsSL</span> <span class="url">https://raw.githubusercontent.com/burkeholland/max/main/install.sh</span> <span class="cmd">| bash</span></div>
-      <div class="install-line">&nbsp;</div>
-      <div class="install-line"><span class="comment"># or with npm</span></div>
-      <div class="install-line"><span class="prompt">$</span> <span class="cmd">npm install -g @burkeholland/max</span></div>
-    </div>
-  </div>
+  <div class="install-cmd"><span class="comment"># one line install</span></div>
+  <div class="install-cmd"><span class="prompt">$</span> <span class="cmd">curl -fsSL</span> <span class="url">https://raw.githubusercontent.com/burkeholland/max/main/install.sh</span> <span class="cmd">| bash</span></div>
+  <div class="install-cmd">&nbsp;</div>
+  <div class="install-cmd"><span class="comment"># or with npm</span></div>
+  <div class="install-cmd"><span class="prompt">$</span> <span class="cmd">npm install -g @burkeholland/max</span></div>
+
   <div class="install-steps">
     <div class="install-step">
       <span class="step-num">01</span>
@@ -1049,13 +882,6 @@
     </div>
   </div>
 </section>
-</div>
-
-<div class="color-break">
-  <div class="cb-coral"></div>
-  <div class="cb-azure"></div>
-  <div class="cb-sage"></div>
-</div>
 
 <footer>
   <span>max v1.0 — built by <a href="https://postrboard.com">burke holland</a></span>
@@ -1083,12 +909,8 @@
     el.addEventListener('click', () => {
       const original = el.textContent;
       el.textContent = 'copied!';
-      el.style.borderColor = '#84cc16';
-      el.style.color = '#84cc16';
       setTimeout(() => {
         el.textContent = original;
-        el.style.borderColor = '';
-        el.style.color = '';
       }, 1500);
     });
   });
