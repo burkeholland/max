@@ -1,5 +1,6 @@
 import * as readline from "readline";
 import * as http from "http";
+import { exec } from "child_process";
 import { readFileSync, writeFileSync, appendFileSync, existsSync } from "fs";
 import { HISTORY_PATH, ensureMaxHome } from "../paths.js";
 
@@ -170,6 +171,7 @@ function flushStreamState(): void {
 let connectionId: string | undefined;
 let isStreaming = false;
 let streamedContent = "";
+let lastResponse = "";
 
 // ── Persistent history ────────────────────────────────────
 const MAX_HISTORY = 1000;
@@ -300,10 +302,12 @@ function connectSSE(): void {
                 // Streaming is done — flush remaining and re-prompt
                 flushStreamState();
                 isStreaming = false;
+                lastResponse = streamedContent;
                 streamedContent = "";
                 process.stdout.write("\n\n");
               } else {
                 // Proactive/background message — render with label
+                lastResponse = event.content;
                 const rendered = renderMarkdown(event.content);
                 process.stdout.write("\n");
                 writeLabeled("max", rendered);
@@ -511,6 +515,7 @@ function cmdHelp(): void {
   console.log(`    ${C.coral("/memory")}               show stored memories`);
   console.log(`    ${C.coral("/skills")}               list installed skills`);
   console.log(`    ${C.coral("/workers")}              list active sessions`);
+  console.log(`    ${C.coral("/copy")}                 copy last response`);
   console.log(`    ${C.coral("/status")}               daemon health check`);
   console.log(`    ${C.coral("/restart")}              restart daemon`);
   console.log(`    ${C.coral("/copy")}                copy last response`);
@@ -612,13 +617,12 @@ setTimeout(() => {
     }
 
     if (trimmed === "/copy") {
-      if (!streamedContent) {
+      if (!lastResponse) {
         console.log(C.dim("  No response to copy.\n"));
         rl.prompt();
         return;
       }
-      const { exec } = require("child_process");
-      const escaped = streamedContent.replace(/'/g, "'\\''");
+      const escaped = lastResponse.replace(/'/g, "'\\''");
       exec(`printf '%s' '${escaped}' | xclip -selection clipboard 2>/dev/null || printf '%s' '${escaped}' | xsel --clipboard --input 2>/dev/null || printf '%s' '${escaped}' | pbcopy 2>/dev/null`, (err: Error | null) => {
         if (err) {
           console.log(C.dim("  Clipboard tool not found (install xclip or xsel).\n"));
