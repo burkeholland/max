@@ -217,7 +217,7 @@ async function executeOnSession(prompt: string, callback: MessageCallback): Prom
   } catch (err) {
     // If the session is broken, invalidate it so it's recreated on next attempt
     const msg = err instanceof Error ? err.message : String(err);
-    if (/closed|destroy|disposed|invalid|expired/i.test(msg)) {
+    if (/closed|destroy|disposed|invalid|expired|not found/i.test(msg)) {
       console.log(`[max] Session appears dead, will recreate: ${msg}`);
       orchestratorSession = undefined;
     }
