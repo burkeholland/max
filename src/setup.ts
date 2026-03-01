@@ -172,6 +172,47 @@ ${BOLD}╔═══════════════════════�
     console.log(`\n${DIM}  Skipping Telegram. You can always set it up later with: max setup${RESET}\n`);
   }
 
+  // ── Google (gogcli) Setup ─────────────────────────────────
+  console.log(`${BOLD}━━━ Google / Gmail Setup (optional) ━━━${RESET}\n`);
+  console.log(`Max includes a Google skill that lets him read your email, manage`);
+  console.log(`your calendar, access Drive, and more — using the ${BOLD}gog${RESET} CLI.`);
+  console.log();
+
+  const setupGoogle = await askYesNo(rl, "Would you like to set up Google services?");
+
+  if (setupGoogle) {
+    // ── Step 1: Install gog CLI ──
+    console.log(`\n${BOLD}Step 1: Install the gog CLI${RESET}\n`);
+    console.log(`  ${CYAN}brew install gogcli${RESET}     ${DIM}(macOS/Linux with Homebrew)${RESET}`);
+    console.log(`  ${CYAN}go install github.com/gogcli/gog@latest${RESET}  ${DIM}(with Go)${RESET}`);
+    console.log();
+
+    await ask(rl, `  ${DIM}Press Enter when installed (or to skip)...${RESET}`);
+
+    // ── Step 2: Authenticate ──
+    console.log(`\n${BOLD}Step 2: Authenticate with your Google account${RESET}\n`);
+    console.log(`  Run this command to log in:`);
+    console.log(`  ${CYAN}gog login your-email@gmail.com${RESET}`);
+    console.log();
+    console.log(`  This opens a browser to authorize gog. Once done, Max can`);
+    console.log(`  access your Google services on your behalf.`);
+    console.log();
+
+    const googleEmail = await ask(
+      rl,
+      `  Google email ${DIM}(Enter to skip)${RESET}: `
+    );
+
+    if (googleEmail.trim()) {
+      console.log(`\n  ${DIM}Run this now or later:${RESET}  ${CYAN}gog login ${googleEmail.trim()}${RESET}`);
+      console.log(`  ${DIM}Check status anytime:${RESET}   ${CYAN}gog status${RESET}`);
+    }
+
+    console.log(`\n${GREEN}  ✓ Google skill is ready — authenticate with gog login when you're set.${RESET}\n`);
+  } else {
+    console.log(`\n${DIM}  Skipping Google. You can always set it up later with: max setup${RESET}\n`);
+  }
+
   // ── Model picker ─────────────────────────────────────────
   console.log(`\n${BOLD}━━━ Default Model ━━━${RESET}\n`);
   console.log(`${DIM}You can switch models anytime by telling Max "switch to gpt-4.1"${RESET}\n`);
