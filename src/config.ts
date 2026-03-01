@@ -43,6 +43,9 @@ export const config = {
   get telegramEnabled(): boolean {
     return !!this.telegramBotToken && this.authorizedUserId !== undefined;
   },
+  get selfEditEnabled(): boolean {
+    return process.env.MAX_SELF_EDIT === "1";
+  },
 };
 
 /** Persist the current model choice to ~/.max/.env */

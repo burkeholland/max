@@ -29,10 +29,14 @@ Commands:
   setup       Interactive first-run configuration
   help        Show this help message
 
+Flags (start):
+  --self-edit Allow Max to modify his own source code (off by default)
+
 Examples:
-  max start   Start the daemon
-  max tui     Open the terminal client
-  max setup   Configure Telegram token and settings
+  max start           Start the daemon
+  max start --self-edit  Start with self-edit enabled
+  max tui             Open the terminal client
+  max setup           Configure Telegram token and settings
 `.trim());
 }
 
@@ -40,9 +44,15 @@ const args = process.argv.slice(2);
 const command = args[0] || "help";
 
 switch (command) {
-  case "start":
+  case "start": {
+    // Parse flags for start command
+    const startFlags = args.slice(1);
+    if (startFlags.includes("--self-edit")) {
+      process.env.MAX_SELF_EDIT = "1";
+    }
     await import("./daemon.js");
     break;
+  }
   case "tui":
     await import("./tui/index.js");
     break;

@@ -169,7 +169,7 @@ async function createOrResumeSession(): Promise<CopilotSession> {
         configDir: SESSIONS_DIR,
         streaming: true,
         systemMessage: {
-          content: getOrchestratorSystemMessage(memorySummary || undefined),
+          content: getOrchestratorSystemMessage(memorySummary || undefined, { selfEditEnabled: config.selfEditEnabled }),
         },
         tools,
         mcpServers,
@@ -192,7 +192,7 @@ async function createOrResumeSession(): Promise<CopilotSession> {
     configDir: SESSIONS_DIR,
     streaming: true,
     systemMessage: {
-      content: getOrchestratorSystemMessage(memorySummary || undefined),
+      content: getOrchestratorSystemMessage(memorySummary || undefined, { selfEditEnabled: config.selfEditEnabled }),
     },
     tools,
     mcpServers,

@@ -13,6 +13,9 @@ function truncate(text: string, max = 200): string {
 
 async function main(): Promise<void> {
   console.log("[max] Starting Max daemon...");
+  if (config.selfEditEnabled) {
+    console.log("[max] ⚠ Self-edit mode enabled — Max can modify his own source code");
+  }
 
   // Set up message logging to daemon console
   setMessageLogger((direction, source, text) => {

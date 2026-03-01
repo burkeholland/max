@@ -513,6 +513,7 @@ function cmdHelp(): void {
   console.log(`    ${C.coral("/workers")}              list active sessions`);
   console.log(`    ${C.coral("/status")}               daemon health check`);
   console.log(`    ${C.coral("/restart")}              restart daemon`);
+  console.log(`    ${C.coral("/copy")}                copy last response`);
   console.log(`    ${C.coral("/clear")}                clear screen`);
   console.log(`    ${C.coral("/quit")}                 exit`);
   console.log();
@@ -607,6 +608,25 @@ setTimeout(() => {
     if (trimmed === "/clear") {
       console.clear();
       rl.prompt();
+      return;
+    }
+
+    if (trimmed === "/copy") {
+      if (!streamedContent) {
+        console.log(C.dim("  No response to copy.\n"));
+        rl.prompt();
+        return;
+      }
+      const { exec } = require("child_process");
+      const escaped = streamedContent.replace(/'/g, "'\\''");
+      exec(`printf '%s' '${escaped}' | xclip -selection clipboard 2>/dev/null || printf '%s' '${escaped}' | xsel --clipboard --input 2>/dev/null || printf '%s' '${escaped}' | pbcopy 2>/dev/null`, (err: Error | null) => {
+        if (err) {
+          console.log(C.dim("  Clipboard tool not found (install xclip or xsel).\n"));
+        } else {
+          console.log(C.dim("  ✓ Copied to clipboard.\n"));
+        }
+        rl.prompt();
+      });
       return;
     }
 
