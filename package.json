@@ -1,7 +1,7 @@
 {
   "name": "@burkeholland/max",
   "version": "1.0.0",
-  "description": "AI orchestrator powered by Copilot SDK — control via Telegram or TUI",
+  "description": "Max — a personal AI assistant for developers, built on the GitHub Copilot SDK",
   "bin": {
     "max": "dist/cli.js"
   },
