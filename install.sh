@@ -82,8 +82,8 @@ if [ "$DEV_MODE" = true ]; then
   echo ""
   node dist/setup.js
 else
-  info "Installing @burkeholland/max..."
-  npm install -g @burkeholland/max
+  info "Installing heymax..."
+  npm install -g heymax
   echo ""
   success "✅ Max installed successfully!"
   echo ""

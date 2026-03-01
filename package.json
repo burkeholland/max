@@ -1,5 +1,5 @@
 {
-  "name": "@burkeholland/max",
+  "name": "heymax",
   "version": "1.0.0",
   "description": "Max — a personal AI assistant for developers, built on the GitHub Copilot SDK",
   "bin": {

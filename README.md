@@ -11,7 +11,7 @@ curl -fsSL https://raw.githubusercontent.com/burkeholland/max/main/install.sh | 
 Or install directly with npm:
 
 ```bash
-npm install -g @burkeholland/max
+npm install -g heymax
 ```
 
 ## Quick Start
