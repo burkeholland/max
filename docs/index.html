@@ -90,12 +90,22 @@
     /* ── HERO ── */
     .hero {
       min-height: 100vh;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      align-items: center;
+      gap: 4rem;
+      padding: 8rem 3rem 6rem;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .hero-left {
       display: flex;
       flex-direction: column;
-      justify-content: center;
-      padding: 8rem 3rem 6rem;
-      max-width: 1200px;
-      margin: 0 auto;
+    }
+    .hero-right {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
     }
 
     .hero-name {
@@ -626,11 +636,14 @@
       nav .nav-links { gap: 0.75rem; }
       nav .nav-links .hide-mobile { display: none; }
 
-      /* Hero: drastically reduce whitespace */
+      /* Hero: stack on mobile, hide TUI */
       .hero {
+        grid-template-columns: 1fr;
+        gap: 2rem;
         min-height: auto;
         padding: 5rem 1.25rem 2.5rem;
       }
+      .hero-right { display: none; }
       .hero-subtitle { margin-top: 1.5rem; }
       .hero-cta { margin-top: 2rem; }
       .hero-cta code { font-size: 0.75rem; padding: 0.75rem 1.25rem; }
@@ -640,7 +653,6 @@
       .what, .skills-section, .arch, .powered {
         padding: 3.5rem 1.25rem;
       }
-      .convo { padding: 3.5rem 1.25rem; }
       .tools-section { padding: 0 1.25rem 3.5rem; }
       .install { padding: 3.5rem 1.25rem; }
 
@@ -691,22 +703,96 @@
       }
     }
 
-    /* ── HERO DECORATION ── */
-    .hero {
-      position: relative;
+    /* ── TUI WINDOW ── */
+    .tui-window {
+      background: #0d1117;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      font-family: var(--mono);
+      width: 100%;
+      max-width: 520px;
+      overflow: hidden;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.22), 0 0 0 1px rgba(255,255,255,0.04);
     }
-    .hero-decoration {
-      position: absolute;
-      top: 50%;
-      right: -2rem;
-      transform: translateY(-50%);
-      width: 420px;
-      height: 320px;
-      opacity: 0.07;
-      pointer-events: none;
+    .tui-titlebar {
+      padding: 0.65rem 1rem;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: rgba(255,255,255,0.02);
     }
-    @media (max-width: 768px) {
-      .hero-decoration { display: none; }
+    .tui-status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--sage);
+      flex-shrink: 0;
+      animation: pulse-dot 2.5s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(132,204,22,0.5); }
+      60% { opacity: 0.8; box-shadow: 0 0 0 5px rgba(132,204,22,0); }
+    }
+    .tui-title {
+      color: rgba(255,255,255,0.28);
+      font-size: 0.7rem;
+      letter-spacing: 0.06em;
+    }
+    .tui-body {
+      padding: 1.25rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+    }
+    .tui-msg {
+      display: grid;
+      grid-template-columns: 2.4rem 1fr;
+      gap: 0.5rem;
+      align-items: start;
+    }
+    .tui-who {
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding-top: 0.18rem;
+      flex-shrink: 0;
+    }
+    .tui-who.you { color: var(--azure); }
+    .tui-who.max { color: var(--coral); }
+    .tui-who.sys { color: var(--sage); }
+    .tui-text {
+      font-family: var(--sans);
+      font-size: 0.87rem;
+      line-height: 1.65;
+      color: rgba(255,255,255,0.58);
+    }
+    .tui-text strong { color: rgba(255,255,255,0.92); font-weight: 600; }
+    .tui-text code {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--azure);
+    }
+    .tui-divider {
+      border-top: 1px solid rgba(255,255,255,0.06);
+      margin: 0.1rem 0;
+    }
+    .tui-inputbar {
+      padding: 0.6rem 1rem 0.85rem;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .tui-prompt { color: var(--coral); font-weight: 700; font-size: 0.9rem; }
+    .tui-cursor-blink {
+      color: rgba(255,255,255,0.35);
+      animation: cursor-blink 1.1s step-end infinite;
+    }
+    @keyframes cursor-blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
     }
 
     /* ── SVG ARCHITECTURE ── */
@@ -811,39 +897,49 @@
 </nav>
 
 <section class="hero">
-  <h1 class="hero-name">max<span class="dot">.</span></h1>
-  <p class="hero-subtitle">
-    A personal AI assistant, built with developers in mind —<br>
-    but capable of <em>anything</em>.
-  </p>
-  <div class="hero-cta">
-    <code onclick="navigator.clipboard.writeText('curl -fsSL https://raw.githubusercontent.com/burkeholland/max/main/install.sh | bash')">curl -fsSL ...install.sh | bash</code>
-    <code class="secondary" onclick="navigator.clipboard.writeText('npm install -g @burkeholland/max')">npm i -g @burkeholland/max</code>
+  <div class="hero-left">
+    <h1 class="hero-name">max<span class="dot">.</span></h1>
+    <p class="hero-subtitle">
+      A personal AI assistant, built with developers in mind —<br>
+      but capable of <em>anything</em>.
+    </p>
+    <div class="hero-cta">
+      <code onclick="navigator.clipboard.writeText('curl -fsSL https://raw.githubusercontent.com/burkeholland/max/main/install.sh | bash')">curl -fsSL ...install.sh | bash</code>
+      <code class="secondary" onclick="navigator.clipboard.writeText('npm install -g @burkeholland/max')">npm i -g @burkeholland/max</code>
+    </div>
+    <span class="hero-label">built on github copilot sdk</span>
   </div>
-  <span class="hero-label">built on github copilot sdk</span>
-  <!-- Hero decorative SVG -->
-  <svg class="hero-decoration" viewBox="0 0 420 320" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <rect x="40" y="20" width="340" height="220" rx="18" stroke="#ff7f50" stroke-width="2"/>
-    <rect x="60" y="50" width="140" height="24" rx="4" fill="#0ea5e9"/>
-    <rect x="60" y="86" width="200" height="12" rx="3" fill="#111827"/>
-    <rect x="60" y="108" width="160" height="12" rx="3" fill="#111827"/>
-    <rect x="60" y="130" width="180" height="12" rx="3" fill="#111827"/>
-    <rect x="60" y="162" width="80" height="24" rx="4" fill="#ff7f50"/>
-    <rect x="150" y="162" width="80" height="24" rx="4" fill="#0ea5e9"/>
-    <circle cx="360" cy="60" r="6" fill="#ff7f50"/>
-    <circle cx="340" cy="60" r="6" fill="#84cc16"/>
-    <circle cx="320" cy="60" r="6" fill="#0ea5e9"/>
-    <line x1="40" y1="260" x2="380" y2="260" stroke="#84cc16" stroke-width="2" stroke-dasharray="8 4"/>
-    <rect x="120" y="272" width="180" height="30" rx="6" stroke="#111827" stroke-width="1.5" fill="none"/>
-    <text x="210" y="292" text-anchor="middle" font-family="Space Mono, monospace" font-size="11" fill="#111827">GitHub Copilot SDK</text>
-  </svg>
+  <div class="hero-right">
+    <div class="tui-window">
+      <div class="tui-titlebar">
+        <span class="tui-status-dot"></span>
+        <span class="tui-title">max — via telegram</span>
+      </div>
+      <div class="tui-body">
+        <div class="tui-msg"><span class="tui-who you">you</span><span class="tui-text">Can you check my email for anything urgent?</span></div>
+        <div class="tui-msg"><span class="tui-who max">max</span><span class="tui-text">I don't have an email skill yet. What email do you use?</span></div>
+        <div class="tui-msg"><span class="tui-who you">you</span><span class="tui-text">Gmail. Go ahead and install it.</span></div>
+        <div class="tui-msg"><span class="tui-who sys">sys</span><span class="tui-text">Found <code>gogcli/gmail</code>. Installing... done ✓</span></div>
+        <div class="tui-msg"><span class="tui-who max">max</span><span class="tui-text"><strong>3 unread</strong> — PR #42 approved, deploy timeline from your manager.</span></div>
+        <div class="tui-divider"></div>
+        <div class="tui-msg"><span class="tui-who you">you</span><span class="tui-text">Fix the auth bug in ~/dev/myapp</span></div>
+        <div class="tui-msg"><span class="tui-who max">max</span><span class="tui-text">On it — spinning up a worker now.</span></div>
+        <div class="tui-msg"><span class="tui-who sys">sys</span><span class="tui-text"><code>[background]</code> auth-fix complete.</span></div>
+        <div class="tui-msg"><span class="tui-who max">max</span><span class="tui-text"><strong>Auth bug fixed.</strong> Expired JWT wasn't catching re-auth. Push a PR?</span></div>
+      </div>
+      <div class="tui-inputbar">
+        <span class="tui-prompt">›</span>
+        <span class="tui-cursor-blink">_</span>
+      </div>
+    </div>
+  </div>
 </section>
 
 <hr class="section-rule">
 
 <section class="what" id="what">
   <div class="what-heading-row">
-    <h2>Not a<br>chatbot<span>.</span></h2>
+    <h2>Personal AI<br>assistant for<br>developers<span>.</span></h2>
   </div>
   <div class="what-right">
     <div class="what-item fade-in">
@@ -886,28 +982,6 @@
 
 <hr class="section-rule">
 
-<section class="convo" id="convo">
-  <div class="convo-header">// A conversation with Max</div>
-
-  <div class="msg fade-in"><span class="msg-who you">You</span><span class="msg-text"><strong>Can you check my email for anything urgent?</strong></span></div>
-  <div class="msg fade-in"><span class="msg-who max">Max</span><span class="msg-text">I don't have a skill for email yet. What email do you use?</span></div>
-  <div class="msg fade-in"><span class="msg-who you">You</span><span class="msg-text"><strong>Gmail. Go ahead and install a skill for it.</strong></span></div>
-  <div class="msg fade-in"><span class="msg-who sys">Sys</span><span class="msg-text">Searching <code>skills.sh</code> for Gmail...</span></div>
-  <div class="msg fade-in"><span class="msg-who sys">Sys</span><span class="msg-text">Found <code>gogcli/gmail</code>. Installing...</span></div>
-  <div class="msg fade-in"><span class="msg-who max">Max</span><span class="msg-text">Installed. You have <strong>3 unread</strong> — one from your manager about the deploy timeline, one from GitHub (<strong>PR #42 approved</strong>), and a newsletter. Want me to open any?</span></div>
-
-  <div class="msg-gap"></div>
-
-  <div class="msg fade-in"><span class="msg-who you">You</span><span class="msg-text"><strong>Start working on the auth bug in ~/dev/myapp</strong></span></div>
-  <div class="msg fade-in"><span class="msg-who max">Max</span><span class="msg-text">On it — spinning up a Copilot CLI session now.</span></div>
-  <div class="msg fade-in"><span class="msg-who you">You</span><span class="msg-text"><strong>What's on my calendar today?</strong></span></div>
-  <div class="msg fade-in"><span class="msg-who max">Max</span><span class="msg-text">You've got standup at 10, a 1:1 with Sarah at 2, and "Focus Time" blocked 3-5pm.</span></div>
-  <div class="msg fade-in"><span class="msg-who sys">Sys</span><span class="msg-text"><code>[background]</code> Worker 'auth-fix' completed. Fixed the token refresh logic — the issue was an expired JWT not triggering re-auth.</span></div>
-  <div class="msg fade-in"><span class="msg-who max">Max</span><span class="msg-text"><strong>Auth bug is fixed.</strong> The token refresh wasn't catching expired JWTs. Want me to push a PR?</span></div>
-</section>
-
-<hr class="section-rule">
-
 <section class="skills-section" id="skills">
   <div class="skills-header">
     <h2>Skills<span>.</span></h2>
@@ -928,62 +1002,75 @@
 <section class="arch">
   <h2>How it works<span>.</span></h2>
   <div class="arch-svg-wrap fade-in">
-    <svg viewBox="0 0 900 420" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Max architecture diagram showing Telegram and Terminal connecting to the Max Daemon which orchestrates worker sessions powered by the GitHub Copilot SDK">
-      <!-- Left: Telegram / Phone -->
-      <rect x="20" y="80" width="140" height="72" rx="14" fill="none" stroke="#0ea5e9" stroke-width="2"/>
-      <text x="90" y="112" text-anchor="middle" font-family="Space Mono, monospace" font-size="11" font-weight="700" fill="#0ea5e9">📱</text>
-      <text x="90" y="134" text-anchor="middle" font-family="Space Mono, monospace" font-size="11" font-weight="700" fill="#0ea5e9">Telegram</text>
+    <svg viewBox="0 0 1000 560" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Max architecture: messages arrive from Telegram and Terminal, Max daemon orchestrates Copilot CLI worker sessions, which interact with GitHub and the internet">
 
-      <!-- Left: Terminal / TUI -->
-      <rect x="20" y="268" width="140" height="72" rx="14" fill="none" stroke="#84cc16" stroke-width="2"/>
-      <text x="90" y="300" text-anchor="middle" font-family="Space Mono, monospace" font-size="11" font-weight="700" fill="#84cc16">⌨</text>
-      <text x="90" y="322" text-anchor="middle" font-family="Space Mono, monospace" font-size="11" font-weight="700" fill="#84cc16">Terminal</text>
+      <!-- "Your machine" boundary -->
+      <rect x="20" y="30" width="660" height="500" rx="22" fill="none" stroke="rgba(17,24,39,0.07)" stroke-width="1.5" stroke-dasharray="9 6"/>
+      <text x="350" y="552" text-anchor="middle" font-family="Space Mono, monospace" font-size="11" fill="rgba(17,24,39,0.18)" letter-spacing="0.18em">YOUR MACHINE</text>
 
-      <!-- Arrows from inputs to daemon -->
-      <line x1="160" y1="116" x2="260" y2="185" stroke="#0ea5e9" stroke-width="1.5" stroke-linecap="round"/>
-      <polygon points="256,180 264,188 253,187" fill="#0ea5e9"/>
-      <line x1="160" y1="304" x2="260" y2="235" stroke="#84cc16" stroke-width="1.5" stroke-linecap="round"/>
-      <polygon points="256,240 264,232 253,233" fill="#84cc16"/>
+      <!-- Telegram node -->
+      <rect x="46" y="80" width="180" height="108" rx="16" fill="rgba(14,165,233,0.06)" stroke="#0ea5e9" stroke-width="2"/>
+      <text x="136" y="128" text-anchor="middle" font-family="Space Mono, monospace" font-size="26" fill="#0ea5e9">📱</text>
+      <text x="136" y="158" text-anchor="middle" font-family="Space Mono, monospace" font-size="14" font-weight="700" fill="#0ea5e9">Telegram</text>
+      <text x="136" y="177" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" fill="rgba(14,165,233,0.5)">phone · desktop</text>
 
-      <!-- Center: Max Daemon -->
-      <rect x="260" y="120" width="280" height="180" rx="18" fill="#111827"/>
-      <text x="400" y="155" text-anchor="middle" font-family="Space Mono, monospace" font-size="15" font-weight="700" fill="#ff7f50">Max Daemon</text>
-      <text x="400" y="178" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" fill="rgba(255,255,255,0.5)">Orchestrator · Memory · Sessions</text>
+      <!-- Terminal node -->
+      <rect x="46" y="370" width="180" height="108" rx="16" fill="rgba(132,204,22,0.06)" stroke="#84cc16" stroke-width="2"/>
+      <text x="136" y="418" text-anchor="middle" font-family="Space Mono, monospace" font-size="26" fill="#84cc16">⌨</text>
+      <text x="136" y="448" text-anchor="middle" font-family="Space Mono, monospace" font-size="14" font-weight="700" fill="#84cc16">Terminal</text>
+      <text x="136" y="467" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" fill="rgba(132,204,22,0.5)">local TUI</text>
 
-      <!-- Workers inside daemon -->
-      <rect x="290" y="198" width="66" height="44" rx="8" fill="none" stroke="#0ea5e9" stroke-width="1.5"/>
-      <text x="323" y="218" text-anchor="middle" font-family="Space Mono, monospace" font-size="12" font-weight="700" fill="#0ea5e9">W1</text>
-      <text x="323" y="234" text-anchor="middle" font-family="Space Mono, monospace" font-size="8" fill="rgba(255,255,255,0.4)">CLI</text>
+      <!-- Connector: Telegram → Max -->
+      <path d="M226 134 C280 134 300 220 360 220" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" fill="none"/>
+      <polygon points="355,215 365,220 355,225" fill="#0ea5e9"/>
 
-      <rect x="367" y="198" width="66" height="44" rx="8" fill="none" stroke="#0ea5e9" stroke-width="1.5"/>
-      <text x="400" y="218" text-anchor="middle" font-family="Space Mono, monospace" font-size="12" font-weight="700" fill="#0ea5e9">W2</text>
-      <text x="400" y="234" text-anchor="middle" font-family="Space Mono, monospace" font-size="8" fill="rgba(255,255,255,0.4)">CLI</text>
+      <!-- Connector: Terminal → Max -->
+      <path d="M226 424 C280 424 300 338 360 338" stroke="#84cc16" stroke-width="2" stroke-linecap="round" fill="none"/>
+      <polygon points="355,333 365,338 355,343" fill="#84cc16"/>
 
-      <rect x="444" y="198" width="66" height="44" rx="8" fill="none" stroke="#0ea5e9" stroke-width="1.5"/>
-      <text x="477" y="218" text-anchor="middle" font-family="Space Mono, monospace" font-size="12" font-weight="700" fill="#0ea5e9">W3</text>
-      <text x="477" y="234" text-anchor="middle" font-family="Space Mono, monospace" font-size="8" fill="rgba(255,255,255,0.4)">CLI</text>
+      <!-- Max Daemon (center) -->
+      <rect x="360" y="90" width="300" height="378" rx="20" fill="#111827"/>
 
-      <!-- SDK foundation bar inside daemon -->
-      <rect x="290" y="258" width="220" height="28" rx="6" fill="none" stroke="#ff7f50" stroke-width="1.5"/>
-      <text x="400" y="277" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" font-weight="700" fill="#ff7f50">GitHub Copilot SDK</text>
+      <!-- Max header inside daemon -->
+      <text x="510" y="140" text-anchor="middle" font-family="Space Mono, monospace" font-size="22" font-weight="700" fill="#ff7f50">Max</text>
+      <text x="510" y="164" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" fill="rgba(255,255,255,0.28)" letter-spacing="0.16em">DAEMON</text>
+      <line x1="380" y1="182" x2="640" y2="182" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
+      <text x="510" y="202" text-anchor="middle" font-family="Space Mono, monospace" font-size="9" fill="rgba(255,255,255,0.22)" letter-spacing="0.13em">ORCHESTRATOR · MEMORY · SKILLS</text>
 
-      <!-- Right: GitHub -->
-      <rect x="620" y="168" width="140" height="84" rx="14" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
-      <!-- GitHub Octocat-like icon -->
-      <circle cx="690" cy="195" r="14" fill="none" stroke="#111827" stroke-width="2"/>
-      <path d="M683 200 C683 196, 686 190, 690 188 C694 190, 697 196, 697 200" stroke="#111827" stroke-width="1.5" fill="none"/>
-      <text x="690" y="195" text-anchor="middle" font-family="Space Mono, monospace" font-size="18" fill="#111827">⚙</text>
-      <text x="690" y="240" text-anchor="middle" font-family="Space Mono, monospace" font-size="11" font-weight="700" fill="#111827">GitHub</text>
-      <text x="690" y="254" text-anchor="middle" font-family="Space Mono, monospace" font-size="8" fill="rgba(17,24,39,0.4)">PRs · Issues · Repos</text>
+      <!-- Workers label -->
+      <text x="395" y="238" font-family="Space Mono, monospace" font-size="9" fill="rgba(255,255,255,0.2)" letter-spacing="0.1em">WORKERS</text>
 
-      <!-- Arrows from daemon to GitHub -->
-      <line x1="540" y1="210" x2="618" y2="210" stroke="rgba(17,24,39,0.2)" stroke-width="1.5" stroke-dasharray="6 3" stroke-linecap="round"/>
-      <polygon points="614,206 622,210 614,214" fill="rgba(17,24,39,0.2)"/>
+      <!-- Worker boxes -->
+      <rect x="385" y="250" width="82" height="62" rx="10" fill="rgba(14,165,233,0.08)" stroke="#0ea5e9" stroke-width="1.5"/>
+      <text x="426" y="278" text-anchor="middle" font-family="Space Mono, monospace" font-size="16" font-weight="700" fill="#0ea5e9">W1</text>
+      <text x="426" y="300" text-anchor="middle" font-family="Space Mono, monospace" font-size="9" fill="rgba(14,165,233,0.45)" letter-spacing="0.05em">CLI</text>
 
-      <!-- Bottom label -->
-      <text x="400" y="380" text-anchor="middle" font-family="Space Mono, monospace" font-size="9" fill="rgba(17,24,39,0.25)" letter-spacing="0.14em">YOUR MACHINE</text>
-      <rect x="200" y="100" width="360" height="220" rx="22" fill="none" stroke="rgba(17,24,39,0.06)" stroke-width="1" stroke-dasharray="6 4"/>
-      <text x="380" y="395" text-anchor="middle" font-family="Space Mono, monospace" font-size="8" fill="rgba(17,24,39,0.15)">Messages in · Work out</text>
+      <rect x="469" y="250" width="82" height="62" rx="10" fill="rgba(14,165,233,0.08)" stroke="#0ea5e9" stroke-width="1.5"/>
+      <text x="510" y="278" text-anchor="middle" font-family="Space Mono, monospace" font-size="16" font-weight="700" fill="#0ea5e9">W2</text>
+      <text x="510" y="300" text-anchor="middle" font-family="Space Mono, monospace" font-size="9" fill="rgba(14,165,233,0.45)" letter-spacing="0.05em">CLI</text>
+
+      <rect x="553" y="250" width="82" height="62" rx="10" fill="rgba(14,165,233,0.08)" stroke="#0ea5e9" stroke-width="1.5"/>
+      <text x="594" y="278" text-anchor="middle" font-family="Space Mono, monospace" font-size="16" font-weight="700" fill="#0ea5e9">W3</text>
+      <text x="594" y="300" text-anchor="middle" font-family="Space Mono, monospace" font-size="9" fill="rgba(14,165,233,0.45)" letter-spacing="0.05em">CLI</text>
+
+      <!-- SDK foundation bar -->
+      <rect x="385" y="334" width="250" height="110" rx="12" fill="rgba(255,127,80,0.06)" stroke="#ff7f50" stroke-width="1.5"/>
+      <text x="510" y="372" text-anchor="middle" font-family="Space Mono, monospace" font-size="13" font-weight="700" fill="#ff7f50">GitHub Copilot SDK</text>
+      <line x1="400" y1="385" x2="620" y2="385" stroke="rgba(255,127,80,0.15)" stroke-width="1"/>
+      <text x="510" y="404" text-anchor="middle" font-family="Space Mono, monospace" font-size="9" fill="rgba(255,127,80,0.5)" letter-spacing="0.08em">MODELS · TOOLS · CONTEXT</text>
+      <text x="510" y="424" text-anchor="middle" font-family="Space Mono, monospace" font-size="9" fill="rgba(255,127,80,0.35)">claude · gpt · gemini · ...</text>
+
+      <!-- Connector: Max → GitHub -->
+      <path d="M660 279 C710 279 720 279 760 279" stroke="rgba(17,24,39,0.18)" stroke-width="2" stroke-dasharray="7 4" stroke-linecap="round"/>
+      <polygon points="756,274 766,279 756,284" fill="rgba(17,24,39,0.18)"/>
+
+      <!-- GitHub node -->
+      <rect x="760" y="200" width="210" height="158" rx="16" fill="none" stroke="rgba(17,24,39,0.14)" stroke-width="2"/>
+      <text x="865" y="258" text-anchor="middle" font-family="Space Mono, monospace" font-size="28" fill="rgba(17,24,39,0.55)">⚙</text>
+      <text x="865" y="292" text-anchor="middle" font-family="Space Mono, monospace" font-size="14" font-weight="700" fill="rgba(17,24,39,0.65)">GitHub</text>
+      <text x="865" y="313" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" fill="rgba(17,24,39,0.35)" letter-spacing="0.06em">PRs · issues · repos</text>
+      <text x="865" y="330" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" fill="rgba(17,24,39,0.22)">+ the internet</text>
+
     </svg>
   </div>
 </section>
@@ -1005,7 +1092,15 @@
     <div class="powered-col">
       <h3>Copilot CLI</h3>
       <p><strong>Every worker is a full Copilot CLI.</strong> That means real file editing, terminal commands, git operations, code search — the same agent that runs in your terminal, orchestrated by Max.</p>
-      <p>Because Max is built on this mature agent harness, he's not limited to code. Email, calendar, smart home, web browsing — if a Copilot CLI can do it, Max can do it too.</p>
+      <p>Because Max builds on this mature agent harness, workers come pre-loaded with a full toolkit — no extra setup required:</p>
+      <ul style="font-family:var(--sans);font-size:0.92rem;color:var(--gray);line-height:2;margin-top:0.75rem;padding-left:1.25rem;list-style:none;">
+        <li style="display:flex;gap:0.5rem;"><span style="color:var(--coral);flex-shrink:0;">→</span> File read / write / edit</li>
+        <li style="display:flex;gap:0.5rem;"><span style="color:var(--coral);flex-shrink:0;">→</span> Bash &amp; terminal execution</li>
+        <li style="display:flex;gap:0.5rem;"><span style="color:var(--coral);flex-shrink:0;">→</span> Git operations &amp; GitHub API</li>
+        <li style="display:flex;gap:0.5rem;"><span style="color:var(--coral);flex-shrink:0;">→</span> Code search (grep, glob, LSP)</li>
+        <li style="display:flex;gap:0.5rem;"><span style="color:var(--coral);flex-shrink:0;">→</span> Web fetch &amp; browser automation</li>
+        <li style="display:flex;gap:0.5rem;"><span style="color:var(--coral);flex-shrink:0;">→</span> SQL / persistent memory</li>
+      </ul>
       <a href="https://docs.github.com/en/copilot/how-tos/copilot-cli" class="powered-link">CLI documentation ↗</a>
     </div>
   </div>
