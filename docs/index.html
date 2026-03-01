@@ -691,6 +691,97 @@
       }
     }
 
+    /* ── HERO DECORATION ── */
+    .hero {
+      position: relative;
+    }
+    .hero-decoration {
+      position: absolute;
+      top: 50%;
+      right: -2rem;
+      transform: translateY(-50%);
+      width: 420px;
+      height: 320px;
+      opacity: 0.07;
+      pointer-events: none;
+    }
+    @media (max-width: 768px) {
+      .hero-decoration { display: none; }
+    }
+
+    /* ── SVG ARCHITECTURE ── */
+    .arch-svg-wrap {
+      width: 100%;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 0;
+    }
+    .arch-svg-wrap svg {
+      width: 100%;
+      height: auto;
+    }
+
+    /* ── HOW IT WORKS FLOW ── */
+    .how-flow {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 0;
+      max-width: 780px;
+      margin: 0 auto 4rem;
+    }
+    .how-step {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      position: relative;
+    }
+    .how-step-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+      background: var(--black);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1rem;
+    }
+    .how-step-icon svg { width: 28px; height: 28px; }
+    .how-step-num {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: rgba(17,24,39,0.25);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.35rem;
+    }
+    .how-step-label {
+      font-family: var(--sans);
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--black);
+    }
+    .how-step-sub {
+      font-family: var(--sans);
+      font-size: 0.8rem;
+      color: var(--gray);
+      margin-top: 0.25rem;
+    }
+    .how-arrow {
+      flex: 0 0 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-top: 20px;
+    }
+    .how-arrow svg { width: 40px; height: 16px; }
+    @media (max-width: 768px) {
+      .how-flow { flex-direction: column; align-items: center; gap: 1.5rem; }
+      .how-arrow { transform: rotate(90deg); padding-top: 0; flex: 0 0 32px; }
+    }
+
     /* ── ANIMATIONS ── */
     @media (prefers-reduced-motion: no-preference) {
       .fade-in {
@@ -731,6 +822,22 @@
     <code class="secondary" onclick="navigator.clipboard.writeText('npm install -g @burkeholland/max')">npm i -g @burkeholland/max</code>
   </div>
   <span class="hero-label">built on github copilot sdk</span>
+  <!-- Hero decorative SVG -->
+  <svg class="hero-decoration" viewBox="0 0 420 320" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <rect x="40" y="20" width="340" height="220" rx="18" stroke="#ff7f50" stroke-width="2"/>
+    <rect x="60" y="50" width="140" height="24" rx="4" fill="#0ea5e9"/>
+    <rect x="60" y="86" width="200" height="12" rx="3" fill="#111827"/>
+    <rect x="60" y="108" width="160" height="12" rx="3" fill="#111827"/>
+    <rect x="60" y="130" width="180" height="12" rx="3" fill="#111827"/>
+    <rect x="60" y="162" width="80" height="24" rx="4" fill="#ff7f50"/>
+    <rect x="150" y="162" width="80" height="24" rx="4" fill="#0ea5e9"/>
+    <circle cx="360" cy="60" r="6" fill="#ff7f50"/>
+    <circle cx="340" cy="60" r="6" fill="#84cc16"/>
+    <circle cx="320" cy="60" r="6" fill="#0ea5e9"/>
+    <line x1="40" y1="260" x2="380" y2="260" stroke="#84cc16" stroke-width="2" stroke-dasharray="8 4"/>
+    <rect x="120" y="272" width="180" height="30" rx="6" stroke="#111827" stroke-width="1.5" fill="none"/>
+    <text x="210" y="292" text-anchor="middle" font-family="Space Mono, monospace" font-size="11" fill="#111827">GitHub Copilot SDK</text>
+  </svg>
 </section>
 
 <hr class="section-rule">
@@ -821,28 +928,65 @@
 
 <section class="arch">
   <h2>How it works<span>.</span></h2>
-  <div class="arch-diagram"><span class="hi-azure">Telegram</span> ──────┐
-                  │
-                  ▼
-            <span class="hi-white">┌───────────────────────────┐</span>
-            <span class="hi-white">│</span>       <span class="hi-coral">Max Daemon</span>           <span class="hi-white">│</span>
-            <span class="hi-white">│</span>                           <span class="hi-white">│</span>
-            <span class="hi-white">│</span>  <span class="hi-sage">Orchestrator</span>              <span class="hi-white">│</span>
-            <span class="hi-white">│</span>  <span class="hi-sage">Persistent Session</span>        <span class="hi-white">│</span>
-            <span class="hi-white">│</span>  <span class="hi-sage">+ Infinite Memory</span>         <span class="hi-white">│</span>
-            <span class="hi-white">│</span>                           <span class="hi-white">│</span>
-            <span class="hi-white">│</span>  ┌────┐ ┌────┐ ┌────┐    <span class="hi-white">│</span>
-            <span class="hi-white">│</span>  │ <span class="hi-azure">W1</span> │ │ <span class="hi-azure">W2</span> │ │ <span class="hi-azure">WN</span> │    <span class="hi-white">│</span>
-            <span class="hi-white">│</span>  │<span class="hi-azure">CLI</span> │ │<span class="hi-azure">CLI</span> │ │<span class="hi-azure">CLI</span> │    <span class="hi-white">│</span>
-            <span class="hi-white">│</span>  └────┘ └────┘ └────┘    <span class="hi-white">│</span>
-            <span class="hi-white">│</span>                           <span class="hi-white">│</span>
-            <span class="hi-white">│</span>  ┌───────────────────┐    <span class="hi-white">│</span>
-            <span class="hi-white">│</span>  │ <span class="hi-coral">GitHub Copilot SDK</span> │    <span class="hi-white">│</span>
-            <span class="hi-white">│</span>  └───────────────────┘    <span class="hi-white">│</span>
-            <span class="hi-white">└───────────────────────────┘</span>
-                  ▲
-                  │
-<span class="hi-sage">Terminal</span> ─────────┘</div>
+  <div class="arch-svg-wrap fade-in">
+    <svg viewBox="0 0 900 420" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Max architecture diagram showing Telegram and Terminal connecting to the Max Daemon which orchestrates worker sessions powered by the GitHub Copilot SDK">
+      <!-- Left: Telegram / Phone -->
+      <rect x="20" y="80" width="140" height="72" rx="14" fill="none" stroke="#0ea5e9" stroke-width="2"/>
+      <text x="90" y="112" text-anchor="middle" font-family="Space Mono, monospace" font-size="11" font-weight="700" fill="#0ea5e9">📱</text>
+      <text x="90" y="134" text-anchor="middle" font-family="Space Mono, monospace" font-size="11" font-weight="700" fill="#0ea5e9">Telegram</text>
+
+      <!-- Left: Terminal / TUI -->
+      <rect x="20" y="268" width="140" height="72" rx="14" fill="none" stroke="#84cc16" stroke-width="2"/>
+      <text x="90" y="300" text-anchor="middle" font-family="Space Mono, monospace" font-size="11" font-weight="700" fill="#84cc16">⌨</text>
+      <text x="90" y="322" text-anchor="middle" font-family="Space Mono, monospace" font-size="11" font-weight="700" fill="#84cc16">Terminal</text>
+
+      <!-- Arrows from inputs to daemon -->
+      <line x1="160" y1="116" x2="260" y2="185" stroke="#0ea5e9" stroke-width="1.5" stroke-linecap="round"/>
+      <polygon points="256,180 264,188 253,187" fill="#0ea5e9"/>
+      <line x1="160" y1="304" x2="260" y2="235" stroke="#84cc16" stroke-width="1.5" stroke-linecap="round"/>
+      <polygon points="256,240 264,232 253,233" fill="#84cc16"/>
+
+      <!-- Center: Max Daemon -->
+      <rect x="260" y="120" width="280" height="180" rx="18" fill="#111827"/>
+      <text x="400" y="155" text-anchor="middle" font-family="Space Mono, monospace" font-size="15" font-weight="700" fill="#ff7f50">Max Daemon</text>
+      <text x="400" y="178" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" fill="rgba(255,255,255,0.5)">Orchestrator · Memory · Sessions</text>
+
+      <!-- Workers inside daemon -->
+      <rect x="290" y="198" width="66" height="44" rx="8" fill="none" stroke="#0ea5e9" stroke-width="1.5"/>
+      <text x="323" y="218" text-anchor="middle" font-family="Space Mono, monospace" font-size="12" font-weight="700" fill="#0ea5e9">W1</text>
+      <text x="323" y="234" text-anchor="middle" font-family="Space Mono, monospace" font-size="8" fill="rgba(255,255,255,0.4)">CLI</text>
+
+      <rect x="367" y="198" width="66" height="44" rx="8" fill="none" stroke="#0ea5e9" stroke-width="1.5"/>
+      <text x="400" y="218" text-anchor="middle" font-family="Space Mono, monospace" font-size="12" font-weight="700" fill="#0ea5e9">W2</text>
+      <text x="400" y="234" text-anchor="middle" font-family="Space Mono, monospace" font-size="8" fill="rgba(255,255,255,0.4)">CLI</text>
+
+      <rect x="444" y="198" width="66" height="44" rx="8" fill="none" stroke="#0ea5e9" stroke-width="1.5"/>
+      <text x="477" y="218" text-anchor="middle" font-family="Space Mono, monospace" font-size="12" font-weight="700" fill="#0ea5e9">W3</text>
+      <text x="477" y="234" text-anchor="middle" font-family="Space Mono, monospace" font-size="8" fill="rgba(255,255,255,0.4)">CLI</text>
+
+      <!-- SDK foundation bar inside daemon -->
+      <rect x="290" y="258" width="220" height="28" rx="6" fill="none" stroke="#ff7f50" stroke-width="1.5"/>
+      <text x="400" y="277" text-anchor="middle" font-family="Space Mono, monospace" font-size="10" font-weight="700" fill="#ff7f50">GitHub Copilot SDK</text>
+
+      <!-- Right: GitHub -->
+      <rect x="620" y="168" width="140" height="84" rx="14" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+      <!-- GitHub Octocat-like icon -->
+      <circle cx="690" cy="195" r="14" fill="none" stroke="#111827" stroke-width="2"/>
+      <path d="M683 200 C683 196, 686 190, 690 188 C694 190, 697 196, 697 200" stroke="#111827" stroke-width="1.5" fill="none"/>
+      <text x="690" y="195" text-anchor="middle" font-family="Space Mono, monospace" font-size="18" fill="#111827">⚙</text>
+      <text x="690" y="240" text-anchor="middle" font-family="Space Mono, monospace" font-size="11" font-weight="700" fill="#111827">GitHub</text>
+      <text x="690" y="254" text-anchor="middle" font-family="Space Mono, monospace" font-size="8" fill="rgba(17,24,39,0.4)">PRs · Issues · Repos</text>
+
+      <!-- Arrows from daemon to GitHub -->
+      <line x1="540" y1="210" x2="618" y2="210" stroke="rgba(17,24,39,0.2)" stroke-width="1.5" stroke-dasharray="6 3" stroke-linecap="round"/>
+      <polygon points="614,206 622,210 614,214" fill="rgba(17,24,39,0.2)"/>
+
+      <!-- Bottom label -->
+      <text x="400" y="380" text-anchor="middle" font-family="Space Mono, monospace" font-size="9" fill="rgba(17,24,39,0.25)" letter-spacing="0.14em">YOUR MACHINE</text>
+      <rect x="200" y="100" width="360" height="220" rx="22" fill="none" stroke="rgba(17,24,39,0.06)" stroke-width="1" stroke-dasharray="6 4"/>
+      <text x="380" y="395" text-anchor="middle" font-family="Space Mono, monospace" font-size="8" fill="rgba(17,24,39,0.15)">Messages in · Work out</text>
+    </svg>
+  </div>
 </section>
 
 <hr class="section-rule">
@@ -906,6 +1050,54 @@
 <hr class="section-rule">
 
 <section class="install" id="install">
+  <!-- How it works: 3-step visual flow -->
+  <div class="how-flow fade-in">
+    <div class="how-step">
+      <div class="how-step-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#ff7f50" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+        </svg>
+      </div>
+      <span class="how-step-num">Step 1</span>
+      <span class="how-step-label">Install Max</span>
+      <span class="how-step-sub">One command setup</span>
+    </div>
+    <div class="how-arrow">
+      <svg viewBox="0 0 40 16" fill="none">
+        <line x1="0" y1="8" x2="32" y2="8" stroke="rgba(17,24,39,0.15)" stroke-width="1.5"/>
+        <polygon points="30,4 38,8 30,12" fill="rgba(17,24,39,0.15)"/>
+      </svg>
+    </div>
+    <div class="how-step">
+      <div class="how-step-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="5" y="2" width="14" height="20" rx="3"/><line x1="12" y1="18" x2="12" y2="18.01"/>
+          <path d="M9 9h1l1 2 2-4h1"/>
+        </svg>
+      </div>
+      <span class="how-step-num">Step 2</span>
+      <span class="how-step-label">Message from phone</span>
+      <span class="how-step-sub">Telegram or terminal</span>
+    </div>
+    <div class="how-arrow">
+      <svg viewBox="0 0 40 16" fill="none">
+        <line x1="0" y1="8" x2="32" y2="8" stroke="rgba(17,24,39,0.15)" stroke-width="1.5"/>
+        <polygon points="30,4 38,8 30,12" fill="rgba(17,24,39,0.15)"/>
+      </svg>
+    </div>
+    <div class="how-step">
+      <div class="how-step-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#84cc16" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
+          <path d="M18 9a9 9 0 0 1-9 9"/>
+        </svg>
+      </div>
+      <span class="how-step-num">Step 3</span>
+      <span class="how-step-label">Work gets done</span>
+      <span class="how-step-sub">PRs, fixes, deploys</span>
+    </div>
+  </div>
+
   <h2>Get Max.</h2>
   <div class="install-cmd"><span class="comment"># one line install</span></div>
   <div class="install-cmd"><span class="prompt">$</span> <span class="cmd">curl -fsSL</span> <span class="url">https://raw.githubusercontent.com/burkeholland/max/main/install.sh</span> <span class="cmd">| bash</span></div>
