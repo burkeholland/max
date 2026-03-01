@@ -5,7 +5,7 @@ import { config } from "../config.js";
 import { loadMcpConfig } from "./mcp-config.js";
 import { getSkillDirectories } from "./skills.js";
 import { resetClient } from "./client.js";
-import { logConversation, getState, setState, getMemorySummary } from "../store/db.js";
+import { logConversation, getState, setState, deleteState, getMemorySummary, getRecentConversation } from "../store/db.js";
 import { SESSIONS_DIR } from "../paths.js";
 
 const MAX_RETRIES = 3;
@@ -42,6 +42,8 @@ let healthCheckTimer: ReturnType<typeof setInterval> | undefined;
 
 // Persistent orchestrator session
 let orchestratorSession: CopilotSession | undefined;
+// Coalesces concurrent ensureOrchestratorSession calls
+let sessionCreatePromise: Promise<CopilotSession> | undefined;
 
 // Message queue — serializes access to the single persistent session
 type QueuedMessage = {
@@ -132,17 +134,37 @@ function startHealthCheck(): void {
 /** Create or resume the persistent orchestrator session. */
 async function ensureOrchestratorSession(): Promise<CopilotSession> {
   if (orchestratorSession) return orchestratorSession;
+  // Coalesce concurrent callers — wait for an in-flight creation
+  if (sessionCreatePromise) return sessionCreatePromise;
 
+  sessionCreatePromise = createOrResumeSession();
+  try {
+    const session = await sessionCreatePromise;
+    orchestratorSession = session;
+    return session;
+  } finally {
+    sessionCreatePromise = undefined;
+  }
+}
+
+/** Internal: actually create or resume a session (not concurrency-safe — use ensureOrchestratorSession). */
+async function createOrResumeSession(): Promise<CopilotSession> {
   const client = await ensureClient();
   const { tools, mcpServers, skillDirectories } = getSessionConfig();
   const memorySummary = getMemorySummary();
+
+  const infiniteSessions = {
+    enabled: true,
+    backgroundCompactionThreshold: 0.80,
+    bufferExhaustionThreshold: 0.95,
+  };
 
   // Try to resume a previous session
   const savedSessionId = getState(ORCHESTRATOR_SESSION_KEY);
   if (savedSessionId) {
     try {
       console.log(`[max] Resuming orchestrator session ${savedSessionId.slice(0, 8)}…`);
-      orchestratorSession = await client.resumeSession(savedSessionId, {
+      const session = await client.resumeSession(savedSessionId, {
         model: config.copilotModel,
         configDir: SESSIONS_DIR,
         streaming: true,
@@ -153,17 +175,19 @@ async function ensureOrchestratorSession(): Promise<CopilotSession> {
         mcpServers,
         skillDirectories,
         onPermissionRequest: approveAll,
+        infiniteSessions,
       });
       console.log(`[max] Resumed orchestrator session successfully`);
-      return orchestratorSession;
+      return session;
     } catch (err) {
       console.log(`[max] Could not resume session: ${err instanceof Error ? err.message : err}. Creating new.`);
+      deleteState(ORCHESTRATOR_SESSION_KEY);
     }
   }
 
   // Create a fresh session
   console.log(`[max] Creating new persistent orchestrator session`);
-  orchestratorSession = await client.createSession({
+  const session = await client.createSession({
     model: config.copilotModel,
     configDir: SESSIONS_DIR,
     streaming: true,
@@ -174,12 +198,27 @@ async function ensureOrchestratorSession(): Promise<CopilotSession> {
     mcpServers,
     skillDirectories,
     onPermissionRequest: approveAll,
+    infiniteSessions,
   });
 
   // Persist the session ID for future restarts
-  setState(ORCHESTRATOR_SESSION_KEY, orchestratorSession.sessionId);
-  console.log(`[max] Created orchestrator session ${orchestratorSession.sessionId.slice(0, 8)}…`);
-  return orchestratorSession;
+  setState(ORCHESTRATOR_SESSION_KEY, session.sessionId);
+  console.log(`[max] Created orchestrator session ${session.sessionId.slice(0, 8)}…`);
+
+  // Recover conversation context if available (session was lost, not first run)
+  const recentHistory = getRecentConversation(10);
+  if (recentHistory) {
+    console.log(`[max] Injecting recent conversation context into new session`);
+    try {
+      await session.sendAndWait({
+        prompt: `[System: Session recovered] Your previous session was lost. Here's the recent conversation for context — do NOT respond to these messages, just absorb the context silently:\n\n${recentHistory}\n\n(End of recovery context. Wait for the next real message.)`,
+      }, 60_000);
+    } catch (err) {
+      console.log(`[max] Context recovery injection failed (non-fatal): ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  return session;
 }
 
 export async function initOrchestrator(client: CopilotClient): Promise<void> {
@@ -220,6 +259,7 @@ async function executeOnSession(prompt: string, callback: MessageCallback): Prom
     if (/closed|destroy|disposed|invalid|expired|not found/i.test(msg)) {
       console.log(`[max] Session appears dead, will recreate: ${msg}`);
       orchestratorSession = undefined;
+      deleteState(ORCHESTRATOR_SESSION_KEY);
     }
     throw err;
   } finally {

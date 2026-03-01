@@ -79,12 +79,18 @@ export function setState(key: string, value: string): void {
   db.prepare(`INSERT OR REPLACE INTO max_state (key, value) VALUES (?, ?)`).run(key, value);
 }
 
+/** Remove a key from persistent state. */
+export function deleteState(key: string): void {
+  const db = getDb();
+  db.prepare(`DELETE FROM max_state WHERE key = ?`).run(key);
+}
+
 /** Log a conversation turn (user, assistant, or system). */
 export function logConversation(role: "user" | "assistant" | "system", content: string, source: string): void {
   const db = getDb();
   db.prepare(`INSERT INTO conversation_log (role, content, source) VALUES (?, ?, ?)`).run(role, content, source);
-  // Keep last 50 entries to prevent unbounded growth
-  db.prepare(`DELETE FROM conversation_log WHERE id NOT IN (SELECT id FROM conversation_log ORDER BY id DESC LIMIT 50)`).run();
+  // Keep last 200 entries to support context recovery after session loss
+  db.prepare(`DELETE FROM conversation_log WHERE id NOT IN (SELECT id FROM conversation_log ORDER BY id DESC LIMIT 200)`).run();
 }
 
 /** Get recent conversation history formatted for injection into system message. */
