@@ -621,26 +621,74 @@
 
     /* ── RESPONSIVE ── */
     @media (max-width: 768px) {
-      nav { padding: 1.5rem 1.5rem; }
-      .hero { padding: 7rem 1.5rem 4rem; }
-      .what, .convo, .skills-section, .arch, .powered, .tools-section, .install {
-        padding-left: 1.5rem;
-        padding-right: 1.5rem;
+      /* Nav: tighter padding, hide less essential links */
+      nav { padding: 1rem 1.25rem; }
+      nav .nav-links { gap: 0.75rem; }
+      nav .nav-links .hide-mobile { display: none; }
+
+      /* Hero: drastically reduce whitespace */
+      .hero {
+        min-height: auto;
+        padding: 5rem 1.25rem 2.5rem;
       }
-      .what-item {
-        grid-template-columns: 72px 1fr;
-        gap: 1.5rem;
-        padding: 2.5rem 0;
-      }
-      .what-item-number { font-size: 3rem; }
+      .hero-subtitle { margin-top: 1.5rem; }
+      .hero-cta { margin-top: 2rem; }
+      .hero-cta code { font-size: 0.75rem; padding: 0.75rem 1.25rem; }
       .hero-label { display: none; }
-      nav .nav-links { gap: 1rem; }
-      .install-steps { flex-direction: column; }
-      .skills-header { flex-direction: column; align-items: flex-start; }
-      .arch-diagram { font-size: 0.6rem; }
+
+      /* All sections: halve vertical padding */
+      .what, .skills-section, .arch, .powered {
+        padding: 3.5rem 1.25rem;
+      }
+      .convo { padding: 3.5rem 1.25rem; }
+      .tools-section { padding: 0 1.25rem 3.5rem; }
+      .install { padding: 3.5rem 1.25rem; }
+
+      /* What section: fix numbered list layout */
+      .what-heading-row { margin-bottom: 2.5rem; }
+      .what-item {
+        grid-template-columns: 48px 1fr;
+        gap: 1rem;
+        padding: 1.75rem 0;
+      }
+      .what-item-number { font-size: 2.2rem; }
+      .what-item-content p { font-size: 0.92rem; line-height: 1.7; }
+
+      /* Conversation: stack sender/message */
       .msg { flex-direction: column; gap: 0.25rem; }
-      .powered-cols { grid-template-columns: 1fr; gap: 3rem; }
+      .convo-header { margin-bottom: 2rem; }
+
+      /* Skills: ensure pills wrap nicely */
+      .skills-header { flex-direction: column; align-items: flex-start; }
+      .skills-flow { gap: 0.5rem; }
+      .skill-tag-item { font-size: 0.88rem; padding: 0.5rem 1rem; }
+
+      /* Architecture diagram: prevent overflow */
+      .arch-diagram { font-size: 0.52rem; line-height: 1.6; }
+
+      /* Powered by: single column */
+      .powered-cols { grid-template-columns: 1fr; gap: 2rem; }
+      .powered-header { margin-bottom: 2.5rem; }
+
+      /* Tools: single column */
       .tool-cell { grid-template-columns: 1fr; gap: 0.5rem; }
+
+      /* Install: prevent code overflow */
+      .install h2 { margin-bottom: 2rem; }
+      .install-cmd {
+        font-size: clamp(0.6rem, 2.8vw, 0.9rem);
+        word-break: break-all;
+        white-space: normal;
+      }
+      .install-steps { flex-direction: column; margin-top: 2rem; }
+
+      /* Footer: stack on mobile */
+      footer {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+        padding: 2.5rem 1.25rem;
+      }
     }
 
     /* ── ANIMATIONS ── */
@@ -665,9 +713,9 @@
     <li><a href="#what">What</a></li>
     <li><a href="#skills">Skills</a></li>
     <li><a href="#install">Install</a></li>
-    <li><a href="docs.html">Docs</a></li>
+    <li class="hide-mobile"><a href="docs.html">Docs</a></li>
     <li><a href="https://github.com/burkeholland/max">GitHub</a></li>
-    <li><a href="https://docs.github.com/en/copilot/how-tos/copilot-sdk/sdk-getting-started" class="ext">SDK Docs</a></li>
+    <li class="hide-mobile"><a href="https://docs.github.com/en/copilot/how-tos/copilot-sdk/sdk-getting-started" class="ext">SDK Docs</a></li>
   </ul>
 </nav>
 
