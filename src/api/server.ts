@@ -7,7 +7,7 @@ import { searchMemories } from "../store/db.js";
 import { listSkills } from "../copilot/skills.js";
 import { restartDaemon } from "../daemon.js";
 
-const app = express();
+export const app = express();
 app.use(express.json());
 
 // Active SSE connections
