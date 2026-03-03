@@ -431,6 +431,8 @@
   <h4>Configuration</h4>
   <a href="#config">Environment Variables</a>
   <a href="#telegram">Telegram Setup</a>
+  <a href="#updating">Updating Max</a>
+  <a href="#self-edit">Self-Edit Mode</a>
 
   <h4>Architecture</h4>
   <a href="#how-it-works">How It Works</a>
@@ -497,8 +499,17 @@
     <tr><td>max start</td><td>Start the Max daemon. Launches the orchestrator, HTTP API (port 7777), and Telegram bot (if configured).</td></tr>
     <tr><td>max tui</td><td>Open the terminal UI. Connects to the running daemon via SSE for real-time streaming.</td></tr>
     <tr><td>max setup</td><td>Run the interactive setup wizard.</td></tr>
+    <tr><td>max update</td><td>Check for a newer version and install it from npm.</td></tr>
     <tr><td>max help</td><td>Show available commands.</td></tr>
     <tr><td>max --version</td><td>Print the version number.</td></tr>
+  </tbody>
+</table>
+
+<h3>Flags</h3>
+<table class="cmd-table">
+  <thead><tr><th>Flag</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>max start --self-edit</td><td>Allow Max to modify his own source code. Off by default — see <a href="#self-edit">Self-Edit Mode</a>.</td></tr>
   </tbody>
 </table>
 
@@ -523,6 +534,8 @@
     <tr><td>/restart</td><td>Restart the Max daemon</td><td><span class="tag tag-tui">TUI</span> <span class="tag tag-tg">TG</span></td></tr>
     <tr><td>/status</td><td>Daemon health check</td><td><span class="tag tag-tui">TUI</span></td></tr>
     <tr><td>/clear</td><td>Clear the terminal screen</td><td><span class="tag tag-tui">TUI</span></td></tr>
+    <tr><td>/copy</td><td>Copy the last response to clipboard</td><td><span class="tag tag-tui">TUI</span></td></tr>
+    <tr><td>/sessions</td><td>Alias for <code>/workers</code></td><td><span class="tag tag-tui">TUI</span></td></tr>
     <tr><td>/quit</td><td>Exit the TUI</td><td><span class="tag tag-tui">TUI</span></td></tr>
     <tr><td>/help</td><td>Show command help</td><td><span class="tag tag-tui">TUI</span> <span class="tag tag-tg">TG</span></td></tr>
   </tbody>
@@ -650,6 +663,7 @@
     <tr><td>API_PORT</td><td>7777</td><td>HTTP API port (1–65535)</td></tr>
     <tr><td>TELEGRAM_BOT_TOKEN</td><td>—</td><td>Bot token from @BotFather (optional)</td></tr>
     <tr><td>AUTHORIZED_USER_ID</td><td>—</td><td>Your Telegram numeric user ID (required if using Telegram)</td></tr>
+    <tr><td>MAX_SELF_EDIT</td><td>—</td><td>Set to <code>1</code> to allow Max to modify his own source code. Usually set via <code>--self-edit</code> flag.</td></tr>
   </tbody>
 </table>
 
@@ -671,6 +685,47 @@
 </div>
 
 <p>We also recommend disabling group joins: in @BotFather, go to <code>/mybots</code> → your bot → Bot Settings → Allow Groups → disable.</p>
+
+
+<h2 id="updating">Updating Max<span>.</span></h2>
+
+<p>Max can update itself. Run the update command to check npm for a newer version and install it:</p>
+
+<div class="code-block">
+  <div class="code-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="label">terminal</span></div>
+  <div class="code-body"><span class="prompt">$</span> <span class="cmd">max update</span>
+<span class="comment"># Update available: v1.0.0 → v1.1.0</span>
+<span class="comment"># Installing...</span>
+<span class="comment"># ✅ Updated to v1.1.0</span></div>
+</div>
+
+<p>If you're already on the latest version, Max will let you know. If the npm registry can't be reached, Max reports the error instead of failing silently.</p>
+
+<h3>Automatic update check</h3>
+<p>Every time the daemon starts (<code>max start</code>), Max performs a <strong>non-blocking</strong> check against the npm registry. If a newer version is available, a notice is logged to the daemon console:</p>
+
+<div class="code-block">
+  <div class="code-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="label">daemon output</span></div>
+  <div class="code-body"><span class="comment">[max] ⬆ Update available: v1.0.0 → v1.1.0  —  run 'max update' to install</span></div>
+</div>
+
+<p>This check never blocks startup and fails silently if the network is unavailable.</p>
+
+
+<h2 id="self-edit">Self-Edit Mode<span>.</span></h2>
+
+<p>By default, Max is <strong>not allowed to modify his own source code</strong>. This is a safety guardrail — if Max accidentally breaks himself, he can't repair himself.</p>
+
+<div class="code-block">
+  <div class="code-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="label">terminal</span></div>
+  <div class="code-body"><span class="prompt">$</span> <span class="cmd">max start</span> <span class="flag">--self-edit</span></div>
+</div>
+
+<p>When self-edit mode is enabled, Max can modify files in his own installation directory. When disabled (the default), Max will politely decline requests to modify his own code and suggest the user make changes manually.</p>
+
+<div class="callout warn">
+  <p><strong>Use with caution.</strong> Self-edit mode is useful for development, but a misconfigured prompt or hallucination could break Max's own code. You can always reinstall with <code>npm install -g heymax</code> to recover.</p>
+</div>
 
 
 <!-- ─────────────────── ARCHITECTURE ─────────────────── -->
@@ -727,7 +782,7 @@
 </div>
 
 <footer>
-  <span>max v1.0 — built by <a href="https://postrboard.com">burke holland</a></span>
+  <span>max v1.1 — built by <a href="https://postrboard.com">burke holland</a></span>
   <span>
     <a href="https://github.com/github/copilot-sdk">copilot sdk</a> · 
     <a href="https://github.com/features/copilot/cli/">copilot cli</a> · 

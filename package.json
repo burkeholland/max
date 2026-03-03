@@ -1,6 +1,6 @@
 {
   "name": "heymax",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Max — a personal AI assistant for developers, built on the GitHub Copilot SDK",
   "bin": {
     "max": "dist/cli.js"
@@ -20,7 +20,13 @@
   "engines": {
     "node": ">=18"
   },
-  "keywords": ["copilot", "telegram", "orchestrator", "ai", "cli"],
+  "keywords": [
+    "copilot",
+    "telegram",
+    "orchestrator",
+    "ai",
+    "cli"
+  ],
   "author": "Burke Holland",
   "license": "MIT",
   "type": "module",
