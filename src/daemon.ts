@@ -5,6 +5,7 @@ import { createBot, startBot, stopBot, sendProactiveMessage } from "./telegram/b
 import { getDb, closeDb } from "./store/db.js";
 import { config } from "./config.js";
 import { spawn } from "child_process";
+import { checkForUpdate } from "./update.js";
 
 function truncate(text: string, max = 200): string {
   const oneLine = text.replace(/\n/g, " ").trim();
@@ -61,6 +62,15 @@ async function main(): Promise<void> {
   }
 
   console.log("[max] Max is fully operational.");
+
+  // Non-blocking update check
+  checkForUpdate()
+    .then(({ updateAvailable, current, latest }) => {
+      if (updateAvailable) {
+        console.log(`[max] ⬆ Update available: v${current} → v${latest}  —  run 'max update' to install`);
+      }
+    })
+    .catch(() => {});  // silent — network may be unavailable
 
   // Notify user if this is a restart (not a fresh start)
   if (config.telegramEnabled && process.env.MAX_RESTARTED === "1") {

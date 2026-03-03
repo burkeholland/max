@@ -27,6 +27,7 @@ Commands:
   start       Start the Max daemon (Telegram bot + HTTP API)
   tui         Connect to the daemon via terminal UI
   setup       Interactive first-run configuration
+  update      Check for updates and install the latest version
   help        Show this help message
 
 Flags (start):
@@ -59,6 +60,28 @@ switch (command) {
   case "setup":
     await import("./setup.js");
     break;
+  case "update": {
+    const { checkForUpdate, performUpdate } = await import("./update.js");
+    const check = await checkForUpdate();
+    if (!check.checkSucceeded) {
+      console.error("⚠ Could not reach the npm registry. Check your network and try again.");
+      process.exit(1);
+    }
+    if (!check.updateAvailable) {
+      console.log(`max v${check.current} is already the latest version.`);
+      break;
+    }
+    console.log(`Update available: v${check.current} → v${check.latest}`);
+    console.log("Installing...");
+    const result = await performUpdate();
+    if (result.ok) {
+      console.log(`✅ Updated to v${check.latest}`);
+    } else {
+      console.error(`❌ Update failed: ${result.output}`);
+      process.exit(1);
+    }
+    break;
+  }
   case "help":
   case "--help":
   case "-h":
