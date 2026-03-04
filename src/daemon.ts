@@ -55,8 +55,13 @@ async function main(): Promise<void> {
 
   // Start Telegram bot (if configured)
   if (config.telegramEnabled) {
-    createBot();
-    await startBot();
+    try {
+      createBot();
+      await startBot();
+    } catch (err) {
+      console.error(`[max] Telegram bot failed to start: ${err instanceof Error ? err.message : err}`);
+      console.log("[max] Continuing without Telegram. Check your TELEGRAM_BOT_TOKEN in ~/.max/.env");
+    }
   } else {
     console.log("[max] Telegram not configured — skipping bot. Run 'max setup' to configure.");
   }

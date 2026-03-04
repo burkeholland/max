@@ -178,6 +178,9 @@ export async function startBot(): Promise<void> {
   console.log("[max] Telegram bot starting...");
   bot.start({
     onStart: () => console.log("[max] Telegram bot connected"),
+  }).catch((err) => {
+    console.error(`[max] Telegram bot stopped: ${err instanceof Error ? err.message : err}`);
+    console.log("[max] Check your TELEGRAM_BOT_TOKEN in ~/.max/.env");
   });
 }
 
