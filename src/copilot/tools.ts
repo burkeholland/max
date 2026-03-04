@@ -43,7 +43,7 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
         }
 
         const session = await deps.client.createSession({
-          model: "claude-sonnet-4.5",
+          model: config.copilotModel,
           configDir: SESSIONS_DIR,
           workingDirectory: args.working_dir,
           onPermissionRequest: approveAll,
@@ -266,7 +266,7 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
 
         try {
           const session = await deps.client.resumeSession(args.session_id, {
-            model: "claude-sonnet-4.5",
+            model: config.copilotModel,
             onPermissionRequest: approveAll,
           });
 

@@ -28,7 +28,7 @@ if (Number.isNaN(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
   throw new Error(`API_PORT must be 1-65535, got: "${raw.API_PORT}"`);
 }
 
-let _copilotModel = raw.COPILOT_MODEL || "claude-sonnet-4.5";
+let _copilotModel = raw.COPILOT_MODEL || "claude-sonnet-4.6";
 
 export const config = {
   telegramBotToken: raw.TELEGRAM_BOT_TOKEN,

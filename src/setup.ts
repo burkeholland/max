@@ -1,5 +1,6 @@
 import * as readline from "readline";
 import { existsSync, readFileSync, writeFileSync } from "fs";
+import { CopilotClient } from "@github/copilot-sdk";
 import { ensureMaxHome, ENV_PATH, MAX_HOME } from "./paths.js";
 
 const BOLD = "\x1b[1m";
@@ -9,13 +10,32 @@ const YELLOW = "\x1b[33m";
 const CYAN = "\x1b[36m";
 const RESET = "\x1b[0m";
 
-const MODELS = [
-  { id: "claude-sonnet-4.5", label: "Claude Sonnet 4.5", desc: "Fast, great for most tasks" },
-  { id: "claude-sonnet-4", label: "Claude Sonnet 4", desc: "Balanced speed and quality" },
-  { id: "gpt-4.1", label: "GPT-4.1", desc: "OpenAI's fast model" },
-  { id: "gpt-4o", label: "GPT-4o", desc: "OpenAI multimodal" },
-  { id: "o3-mini", label: "o3-mini", desc: "OpenAI reasoning model" },
+const FALLBACK_MODELS = [
+  { id: "claude-sonnet-4.6", label: "Claude Sonnet 4.6", desc: "Fast, great for most tasks" },
+  { id: "gpt-5.1", label: "GPT-5.1", desc: "OpenAI's fast model" },
+  { id: "gpt-4.1", label: "GPT-4.1", desc: "Free included model" },
 ];
+
+async function fetchModels(): Promise<{ id: string; label: string; desc: string }[]> {
+  let client: CopilotClient | undefined;
+  try {
+    client = new CopilotClient({ autoStart: true });
+    await client.start();
+    const models = await client.listModels();
+    return models
+      .filter((m) => m.policy?.state === "enabled" && !m.name.includes("(Internal only)"))
+      .map((m) => {
+        const mult = m.billing?.multiplier;
+        const desc =
+          mult === 0 || mult === undefined ? "Included with Copilot" : `Premium (${mult}x)`;
+        return { id: m.id, label: m.name, desc };
+      });
+  } catch {
+    return [];
+  } finally {
+    try { await client?.stop(); } catch { /* best-effort */ }
+  }
+}
 
 function ask(rl: readline.Interface, question: string): Promise<string> {
   return new Promise((resolve) => rl.question(question, resolve));
@@ -230,11 +250,22 @@ ${BOLD}╔═══════════════════════�
 
   // ── Model picker ─────────────────────────────────────────
   console.log(`\n${BOLD}━━━ Default Model ━━━${RESET}\n`);
+  console.log(`${DIM}Fetching available models from Copilot...${RESET}`);
+
+  let models = await fetchModels();
+  if (models.length === 0) {
+    console.log(`${YELLOW}  Could not fetch models (Copilot CLI may not be authenticated yet).${RESET}`);
+    console.log(`${DIM}  Showing a curated list — you can switch anytime after setup.${RESET}\n`);
+    models = FALLBACK_MODELS;
+  } else {
+    console.log(`${GREEN}  ✓ Found ${models.length} models${RESET}\n`);
+  }
+
   console.log(`${DIM}You can switch models anytime by telling Max "switch to gpt-4.1"${RESET}\n`);
 
-  const currentModel = existing.COPILOT_MODEL || "claude-sonnet-4.5";
-  const model = await askPicker(rl, "Choose a default model:", MODELS, currentModel);
-  const modelLabel = MODELS.find((m) => m.id === model)?.label || model;
+  const currentModel = existing.COPILOT_MODEL || "claude-sonnet-4.6";
+  const model = await askPicker(rl, "Choose a default model:", models, currentModel);
+  const modelLabel = models.find((m) => m.id === model)?.label || model;
   console.log(`\n${GREEN}  ✓ Using ${modelLabel}${RESET}\n`);
 
   // ── Write config ─────────────────────────────────────────
