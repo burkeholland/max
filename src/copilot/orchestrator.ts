@@ -1,12 +1,13 @@
 import { approveAll, type CopilotClient, type CopilotSession } from "@github/copilot-sdk";
 import { createTools, type WorkerInfo } from "./tools.js";
 import { getOrchestratorSystemMessage } from "./system-message.js";
-import { config } from "../config.js";
+import { config, persistModel } from "../config.js";
 import { loadMcpConfig } from "./mcp-config.js";
 import { getSkillDirectories } from "./skills.js";
 import { resetClient } from "./client.js";
 import { logConversation, getState, setState, deleteState, getMemorySummary, getRecentConversation } from "../store/db.js";
 import { SESSIONS_DIR } from "../paths.js";
+import { classifyAndRoute, resetClassifier } from "./classifier.js";
 
 const MAX_RETRIES = 3;
 const RECONNECT_DELAYS_MS = [1_000, 3_000, 10_000];
@@ -106,6 +107,7 @@ async function ensureClient(): Promise<CopilotClient> {
     resetPromise = resetClient().then((c) => {
       console.log(`[max] Client reset successful, state: ${c.getState()}`);
       copilotClient = c;
+      resetClassifier();
       return c;
     }).finally(() => { resetPromise = undefined; });
   }
@@ -221,6 +223,15 @@ async function createOrResumeSession(): Promise<CopilotSession> {
   return session;
 }
 
+/** Force-invalidate the orchestrator session so it's recreated with the current model. */
+export function invalidateSession(): void {
+  if (orchestratorSession) {
+    console.log(`[max] Invalidating orchestrator session for model switch`);
+    orchestratorSession = undefined;
+    deleteState(ORCHESTRATOR_SESSION_KEY);
+  }
+}
+
 export async function initOrchestrator(client: CopilotClient): Promise<void> {
   copilotClient = client;
   const { mcpServers, skillDirectories } = getSessionConfig();
@@ -282,6 +293,17 @@ async function processQueue(): Promise<void> {
     const item = messageQueue.shift()!;
     currentSourceChannel = item.sourceChannel;
     try {
+      // Eco mode: classify and route before processing
+      if (config.ecoMode && item.sourceChannel && copilotClient) {
+        const { model, tier } = await classifyAndRoute(copilotClient, item.prompt);
+        if (model !== config.copilotModel) {
+          console.log(`[max] Eco mode: switching ${config.copilotModel} → ${model} (${tier})`);
+          // Only update in-memory — don't persist per-classification routing decisions
+          config.copilotModel = model;
+          invalidateSession();
+        }
+      }
+
       const result = await executeOnSession(item.prompt, item.callback);
       item.resolve(result);
     } catch (err) {

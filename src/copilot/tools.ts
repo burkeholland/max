@@ -5,9 +5,9 @@ import { readdirSync, readFileSync, statSync } from "fs";
 import { join, sep, resolve } from "path";
 import { homedir } from "os";
 import { listSkills, createSkill } from "./skills.js";
-import { config, persistModel } from "../config.js";
+import { config, persistModel, persistEcoMode } from "../config.js";
 import { SESSIONS_DIR } from "../paths.js";
-import { getCurrentSourceChannel } from "./orchestrator.js";
+import { getCurrentSourceChannel, invalidateSession } from "./orchestrator.js";
 
 const BLOCKED_WORKER_DIRS = [
   ".ssh", ".gnupg", ".aws", ".azure", ".config/gcloud",
@@ -372,7 +372,7 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
             const billing = m.billing ? ` (${m.billing.multiplier}x)` : "";
             return `• ${m.id}${billing}${active}`;
           });
-          return `Available models (${models.length}):\n${lines.join("\n")}\n\nCurrent: ${current}`;
+          return `Available models (${models.length}):\n${lines.join("\n")}\n\nCurrent: ${current}${config.ecoMode ? `\n\n🌿 Eco mode is ON — auto-routing: SIMPLE→${config.ecoTiers.simple}, MEDIUM→${config.ecoTiers.medium}, COMPLEX→${config.ecoTiers.complex}` : ""}`;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           return `Failed to list models: ${msg}`;
@@ -404,12 +404,47 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
           const previous = config.copilotModel;
           config.copilotModel = args.model_id;
           persistModel(args.model_id);
+          invalidateSession();
 
           return `Switched model from '${previous}' to '${args.model_id}'. Takes effect on next message.`;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           return `Failed to switch model: ${msg}`;
         }
+      },
+    }),
+
+    defineTool("toggle_eco_mode", {
+      description:
+        "Enable or disable eco mode. When enabled, a lightweight model (gpt-4.1) classifies each " +
+        "request by complexity and routes it to the most cost-effective model: " +
+        "SIMPLE→gpt-4.1, MEDIUM→claude-sonnet-4.6, COMPLEX→claude-opus-4.6. " +
+        "Use when the user says 'enable eco mode', 'turn on eco mode', 'disable eco mode', etc.",
+      parameters: z.object({
+        enabled: z.boolean().describe("true to enable eco mode, false to disable"),
+      }),
+      handler: async (args) => {
+        const tiers = config.ecoTiers;
+        if (args.enabled) {
+          if (config.ecoMode) {
+            return `🌿 Eco mode is already enabled. Auto-routing:\n• SIMPLE → ${tiers.simple}\n• MEDIUM → ${tiers.medium}\n• COMPLEX → ${tiers.complex}`;
+          }
+          // Save the current model so we can restore it when eco mode is disabled
+          config.manualModel = config.copilotModel;
+          config.ecoMode = true;
+          persistEcoMode(true);
+          invalidateSession();
+          return `🌿 Eco mode enabled. Requests will be auto-routed:\n• SIMPLE → ${tiers.simple}\n• MEDIUM → ${tiers.medium}\n• COMPLEX → ${tiers.complex}`;
+        }
+        if (!config.ecoMode) {
+          return `Eco mode is already disabled. Using ${config.copilotModel}.`;
+        }
+        config.ecoMode = false;
+        persistEcoMode(false);
+        config.copilotModel = config.manualModel;
+        persistModel(config.manualModel);
+        invalidateSession();
+        return `Eco mode disabled. Restored model to ${config.manualModel}.`;
       },
     }),
 

@@ -1,6 +1,20 @@
+import { config } from "../config.js";
+
 export function getOrchestratorSystemMessage(memorySummary?: string, opts?: { selfEditEnabled?: boolean }): string {
   const memoryBlock = memorySummary
     ? `\n## Long-Term Memory\nThese are things you've been asked to remember or have noted as important:\n\n${memorySummary}\n`
+    : "";
+
+  const ecoBlock = config.ecoMode
+    ? `\n## 🌿 Eco Mode (Active)
+
+Eco mode is enabled. A lightweight classifier (gpt-4.1) automatically routes each request to the most cost-effective model based on complexity:
+- **SIMPLE** → ${config.ecoTiers.simple} (greetings, lookups, yes/no)
+- **MEDIUM** → ${config.ecoTiers.medium} (explanations, code review, analysis)
+- **COMPLEX** → ${config.ecoTiers.complex} (multi-step coding, architecture, debugging)
+
+You are currently running as the model selected by the router. Do NOT call \`switch_model\` yourself when eco mode is on — the router handles model selection automatically. The user can say "disable eco mode" or "turn off eco mode" to return to manual model selection.
+`
     : "";
 
   const selfEditBlock = opts?.selfEditEnabled
@@ -125,5 +139,5 @@ Always prefer finding an existing skill over building one from scratch. The skil
 13. **You have persistent memory.** Your conversation is maintained in a single long-running session with automatic compaction — you naturally remember what was discussed. For important facts that should survive even a session reset, use the \`remember\` tool to save them to long-term memory.
 14. **Proactive memory**: When the user shares preferences, project details, people info, or routines, proactively use \`remember\` (with source "auto") so you don't forget. Don't ask for permission — just save it.
 15. **Sending media to Telegram**: You can send photos/images to the user on Telegram by calling: \`curl -s -X POST http://127.0.0.1:7777/send-photo -H 'Content-Type: application/json' -d '{"photo": "<path-or-url>", "caption": "<optional caption>"}'\`. Use this whenever you have an image to share — download it to a local file first, then send it via this endpoint.
-${selfEditBlock}${memoryBlock}`;
+${selfEditBlock}${ecoBlock}${memoryBlock}`;
 }
