@@ -222,6 +222,9 @@ function trimHistoryFile(): void {
 ensureMaxHome();
 const history = loadHistory();
 
+// Track prompt visual width for terminal wrapping calculations
+let promptVisualWidth = 4; // "  › " = 4 visible chars
+
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
@@ -245,10 +248,11 @@ function showBanner(): void {
   console.log();
 }
 
-function showStatus(model?: string, skillCount?: number): void {
+function showStatus(model?: string, skillCount?: number, ecoMode?: boolean): void {
   const parts: string[] = [];
   if (model) parts.push(`${C.dim("model:")} ${C.cyan(model)}`);
   if (skillCount !== undefined) parts.push(`${C.dim("skills:")} ${C.cyan(String(skillCount))}`);
+  if (ecoMode) parts.push(`${C.green("🌿 eco")}`);
   if (parts.length) console.log(`    ${parts.join("    ")}`);
   console.log();
   console.log(C.dim("    /help for commands · esc to cancel"));
@@ -258,13 +262,20 @@ function showStatus(model?: string, skillCount?: number): void {
 function fetchStartupInfo(): void {
   let model = "unknown";
   let skillCount = 0;
+  let ecoMode = false;
   let done = 0;
   const check = () => {
     done++;
-    if (done === 2) showStatus(model, skillCount);
+    if (done === 2) {
+      showStatus(model, skillCount, ecoMode);
+      if (ecoMode) {
+        rl.setPrompt(`  ${C.green("🌿")}${C.coral("›")} `);
+        promptVisualWidth = 6; // "  🌿› " = 6 visible chars (emoji = 2 cells)
+      }
+    }
   };
 
-  apiGetSilent("/model", (data: any) => { model = data?.model || "unknown"; check(); });
+  apiGetSilent("/model", (data: any) => { model = data?.model || "unknown"; ecoMode = !!data?.ecoMode; check(); });
   apiGetSilent("/skills", (data: any) => { skillCount = Array.isArray(data) ? data.length : 0; check(); });
 }
 
@@ -571,8 +582,7 @@ setTimeout(() => {
 
       // Re-echo user input with YOU label, accounting for terminal wrapping
       const cols = process.stdout.columns || 80;
-      const promptVisualLen = 4; // "  › " is 4 visible chars
-      const inputVisualLen = promptVisualLen + trimmed.length;
+      const inputVisualLen = promptVisualWidth + trimmed.length;
       const wrappedLines = Math.ceil(Math.max(inputVisualLen, 1) / cols);
       // Move up enough lines to cover all wrapped lines
       if (wrappedLines > 1) {

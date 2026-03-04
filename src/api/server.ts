@@ -134,7 +134,7 @@ app.post("/cancel", async (_req: Request, res: Response) => {
 
 // Get or switch model
 app.get("/model", (_req: Request, res: Response) => {
-  res.json({ model: config.copilotModel });
+  res.json({ model: config.copilotModel, ecoMode: config.ecoMode });
 });
 app.post("/model", async (req: Request, res: Response) => {
   const { model } = req.body as { model?: string };

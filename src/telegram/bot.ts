@@ -136,11 +136,13 @@ export function createBot(): Bot {
       (text: string, done: boolean) => {
         if (done) {
           stopTyping();
+          // Prepend eco mode indicator when active
+          const displayText = config.ecoMode ? `🌿 ${text}` : text;
           // Send final message — use chunking for long responses, reply-quote original
           void (async () => {
-            const formatted = toTelegramMarkdown(text);
+            const formatted = toTelegramMarkdown(displayText);
             const chunks = chunkMessage(formatted);
-            const fallbackChunks = chunkMessage(text);
+            const fallbackChunks = chunkMessage(displayText);
             const sendChunk = async (chunk: string, fallback: string, isFirst: boolean) => {
               const opts = isFirst
                 ? { parse_mode: "MarkdownV2" as const, reply_parameters: replyParams }
