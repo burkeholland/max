@@ -57,8 +57,12 @@ async function main(): Promise<void> {
   if (config.telegramEnabled) {
     createBot();
     await startBot();
-  } else {
+  } else if (!config.telegramBotToken && config.authorizedUserId === undefined) {
     console.log("[max] Telegram not configured — skipping bot. Run 'max setup' to configure.");
+  } else if (!config.telegramBotToken) {
+    console.log("[max] Telegram bot token missing — skipping bot. Run 'max setup' and enter your bot token.");
+  } else {
+    console.log("[max] Telegram user ID missing — skipping bot. Run 'max setup' and enter your Telegram user ID (get it from @userinfobot).");
   }
 
   console.log("[max] Max is fully operational.");

@@ -10,7 +10,10 @@ let bot: Bot | undefined;
 
 export function createBot(): Bot {
   if (!config.telegramBotToken) {
-    throw new Error("TELEGRAM_BOT_TOKEN is required to create the bot. Run 'max setup' first.");
+    throw new Error("Telegram bot token is missing. Run 'max setup' and enter the bot token from @BotFather.");
+  }
+  if (config.authorizedUserId === undefined) {
+    throw new Error("Telegram user ID is missing. Run 'max setup' and enter your Telegram user ID (get it from @userinfobot).");
   }
   bot = new Bot(config.telegramBotToken);
 
@@ -178,7 +181,9 @@ export async function startBot(): Promise<void> {
     onStart: () => console.log("[max] Telegram bot connected"),
   }).catch((err: any) => {
     if (err?.error_code === 401) {
-      console.error("[max] ❌ Telegram bot token is invalid or expired. Run 'max setup' to reconfigure.");
+      console.error("[max] ⚠️ Telegram bot token is invalid or expired. Run 'max setup' and re-enter your bot token from @BotFather.");
+    } else if (err?.error_code === 409) {
+      console.error("[max] ⚠️ Another bot instance is already running with this token. Stop the other instance first.");
     } else {
       console.error("[max] ❌ Telegram bot failed to start:", err?.message || err);
     }
