@@ -38,11 +38,13 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
       description:
         "Create a new Copilot CLI worker session in a specific directory. " +
         "Use for coding tasks, debugging, file operations. " +
-        "Returns confirmation with session name.",
+        "Returns confirmation with session name. " +
+        "Optionally specify a model for this worker (e.g. when the user asks to use a specific model for a task).",
       parameters: z.object({
         name: z.string().describe("Short descriptive name for the session, e.g. 'auth-fix'"),
         working_dir: z.string().describe("Absolute path to the directory to work in"),
         initial_prompt: z.string().optional().describe("Optional initial prompt to send to the worker"),
+        model: z.string().optional().describe("Model to use for this worker session. If omitted, uses the current default model."),
       }),
       handler: async (args) => {
         if (deps.workers.has(args.name)) {
@@ -63,8 +65,32 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
           return `Worker limit reached (${MAX_CONCURRENT_WORKERS}). Active: ${names}. Kill a session first.`;
         }
 
+        let workerModel = config.copilotModel;
+        if (args.model) {
+          const trimmed = args.model.trim();
+          if (!trimmed) {
+            return "Invalid model: empty string. Use list_models to see available options.";
+          }
+          try {
+            const models = await deps.client.listModels();
+            const match = models.find((m) => m.id === trimmed);
+            if (!match) {
+              const suggestions = models
+                .filter((m) => m.id.includes(trimmed) || m.id.toLowerCase().includes(trimmed.toLowerCase()))
+                .map((m) => m.id);
+              const hint = suggestions.length > 0
+                ? ` Did you mean: ${suggestions.join(", ")}?`
+                : " Use list_models to see available options.";
+              return `Model '${trimmed}' not found.${hint}`;
+            }
+            workerModel = trimmed;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            return `Failed to validate model: ${msg}`;
+          }
+        }
         const session = await deps.client.createSession({
-          model: config.copilotModel,
+          model: workerModel,
           configDir: SESSIONS_DIR,
           workingDirectory: args.working_dir,
           onPermissionRequest: approveAll,
@@ -109,10 +135,10 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
             getDb().prepare(`DELETE FROM worker_sessions WHERE name = ?`).run(args.name);
           });
 
-          return `Worker '${args.name}' created in ${args.working_dir}. Task dispatched — I'll notify you when it's done.`;
+          return `Worker '${args.name}' created in ${args.working_dir} (model: ${workerModel}). Task dispatched — I'll notify you when it's done.`;
         }
 
-        return `Worker '${args.name}' created in ${args.working_dir}. Use send_to_worker to send it prompts.`;
+        return `Worker '${args.name}' created in ${args.working_dir} (model: ${workerModel}). Use send_to_worker to send it prompts.`;
       },
     }),
 
