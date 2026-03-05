@@ -38,7 +38,9 @@ if (!Number.isInteger(parsedWorkerTimeout) || parsedWorkerTimeout <= 0) {
   throw new Error(`WORKER_TIMEOUT must be a positive integer (ms), got: "${raw.WORKER_TIMEOUT}"`);
 }
 
-let _copilotModel = raw.COPILOT_MODEL || "claude-sonnet-4.6";
+export const DEFAULT_MODEL = "claude-sonnet-4.6";
+
+let _copilotModel = raw.COPILOT_MODEL || DEFAULT_MODEL;
 
 export const config = {
   telegramBotToken: raw.TELEGRAM_BOT_TOKEN,

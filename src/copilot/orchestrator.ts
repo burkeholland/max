@@ -1,7 +1,7 @@
 import { approveAll, type CopilotClient, type CopilotSession } from "@github/copilot-sdk";
 import { createTools, type WorkerInfo } from "./tools.js";
 import { getOrchestratorSystemMessage } from "./system-message.js";
-import { config } from "../config.js";
+import { config, DEFAULT_MODEL } from "../config.js";
 import { loadMcpConfig } from "./mcp-config.js";
 import { getSkillDirectories } from "./skills.js";
 import { resetClient } from "./client.js";
@@ -224,6 +224,19 @@ async function createOrResumeSession(): Promise<CopilotSession> {
 export async function initOrchestrator(client: CopilotClient): Promise<void> {
   copilotClient = client;
   const { mcpServers, skillDirectories } = getSessionConfig();
+
+  // Validate configured model against available models
+  try {
+    const models = await client.listModels();
+    const configured = config.copilotModel;
+    const isAvailable = models.some((m) => m.id === configured);
+    if (!isAvailable) {
+      console.log(`[max] ⚠️ Configured model '${configured}' is not available. Falling back to '${DEFAULT_MODEL}'.`);
+      config.copilotModel = DEFAULT_MODEL;
+    }
+  } catch (err) {
+    console.log(`[max] Could not validate model (will use '${config.copilotModel}' as-is): ${err instanceof Error ? err.message : err}`);
+  }
 
   console.log(`[max] Loading ${Object.keys(mcpServers).length} MCP server(s): ${Object.keys(mcpServers).join(", ") || "(none)"}`);
   console.log(`[max] Skill directories: ${skillDirectories.join(", ") || "(none)"}`);
