@@ -4,7 +4,7 @@ import { getDb, addMemory, searchMemories, removeMemory } from "../store/db.js";
 import { readdirSync, readFileSync, statSync } from "fs";
 import { join, sep, resolve } from "path";
 import { homedir } from "os";
-import { listSkills, createSkill } from "./skills.js";
+import { listSkills, createSkill, removeSkill } from "./skills.js";
 import { config, persistModel } from "../config.js";
 import { SESSIONS_DIR } from "../paths.js";
 import { getCurrentSourceChannel } from "./orchestrator.js";
@@ -373,6 +373,20 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
       }),
       handler: async (args) => {
         return createSkill(args.slug, args.name, args.description, args.instructions);
+      },
+    }),
+
+    defineTool("uninstall_skill", {
+      description:
+        "Remove a skill from Max's local skills directory (~/.max/skills/). " +
+        "The skill will no longer be available on the next message. " +
+        "Only works for local skills — bundled and global skills cannot be removed this way.",
+      parameters: z.object({
+        slug: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).describe("The kebab-case slug of the skill to remove, e.g. 'gmail', 'web-search'"),
+      }),
+      handler: async (args) => {
+        const result = removeSkill(args.slug);
+        return result.message;
       },
     }),
 

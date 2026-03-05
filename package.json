@@ -27,6 +27,10 @@
     "type": "git",
     "url": "https://github.com/burkeholland/max.git"
   },
+  "homepage": "https://github.com/burkeholland/max#readme",
+  "bugs": {
+    "url": "https://github.com/burkeholland/max/issues"
+  },
   "type": "module",
   "dependencies": {
     "@github/copilot-sdk": "^0.1.26",

@@ -441,6 +441,27 @@ function apiPost(path: string, body: Record<string, unknown>, cb: (data: any) =>
   req.end();
 }
 
+/** DELETE an endpoint and call back with parsed result. */
+function apiDelete(path: string, cb: (data: any) => void): void {
+  const url = new URL(path, API_BASE);
+  const req = http.request(url, {
+    method: "DELETE",
+    headers: authHeaders(),
+  }, (res) => {
+    let data = "";
+    res.on("data", (chunk) => (data += chunk));
+    res.on("end", () => {
+      try { cb(JSON.parse(data)); } catch { console.log(data); }
+      rl.prompt();
+    });
+  });
+  req.on("error", (err) => {
+    console.error(C.red(`  Error: ${err.message}`));
+    rl.prompt();
+  });
+  req.end();
+}
+
 function sendCancel(): void {
   const url = new URL("/cancel", API_BASE);
   const req = http.request(url, { method: "POST", headers: authHeaders() }, (res) => {
@@ -510,15 +531,65 @@ function cmdSkills(): void {
   apiGet("/skills", (skills: any[]) => {
     if (!skills || skills.length === 0) {
       console.log(C.dim("  No skills installed.\n"));
-    } else {
-      for (const s of skills) {
-        const src = s.source === "bundled" ? C.dim("bundled")
-          : s.source === "local" ? C.green("local")
-          : C.cyan("global");
-        console.log(`  • ${C.bold(s.name)} ${C.dim(`(${src})`)} ${C.dim("—")} ${s.description}`);
-      }
-      console.log();
+      return;
     }
+
+    // Build table
+    const localSkills: { idx: number; slug: string }[] = [];
+    console.log();
+    console.log(`  ${C.boldWhite("#")}   ${C.boldWhite("Skill")}${" ".repeat(24)}${C.boldWhite("Source")}      ${C.boldWhite("Description")}`);
+    console.log(C.dim("  " + "─".repeat(72)));
+
+    for (let i = 0; i < skills.length; i++) {
+      const s = skills[i];
+      const num = String(i + 1).padStart(2);
+      const name = s.name.padEnd(28).slice(0, 28);
+      const src = s.source === "bundled" ? C.dim("bundled")
+        : s.source === "local" ? C.green("local")
+        : C.cyan("global");
+      const srcPad = s.source.padEnd(10);
+      const desc = (s.description || "").slice(0, 40);
+
+      if (s.source === "local") {
+        localSkills.push({ idx: i + 1, slug: s.slug });
+        console.log(`  ${C.cyan(num)}  ${name} ${src}${" ".repeat(Math.max(0, 10 - s.source.length))} ${C.dim(desc)}`);
+      } else {
+        console.log(`  ${C.dim(num)}  ${name} ${src}${" ".repeat(Math.max(0, 10 - s.source.length))} ${C.dim(desc)}`);
+      }
+    }
+
+    console.log();
+
+    if (localSkills.length === 0) {
+      console.log(C.dim("  No local skills to uninstall.\n"));
+      return;
+    }
+
+    console.log(C.dim(`  Type a number to uninstall a local skill, or press Enter to go back.`));
+    rl.question(`  ${C.coral("uninstall #")} `, (answer) => {
+      const trimmed = answer.trim();
+      if (!trimmed) {
+        console.log();
+        rl.prompt();
+        return;
+      }
+
+      const num = /^\d+$/.test(trimmed) ? parseInt(trimmed, 10) : NaN;
+      const match = localSkills.find((s) => s.idx === num);
+      if (!match) {
+        console.log(C.yellow(`  Invalid selection. Only local skills (highlighted) can be uninstalled.\n`));
+        rl.prompt();
+        return;
+      }
+
+      apiDelete(`/skills/${encodeURIComponent(match.slug)}`, (data: any) => {
+        if (data.error) {
+          console.log(C.red(`  Error: ${data.error}\n`));
+        } else {
+          console.log(C.green(`  ✓ Removed '${match.slug}'\n`));
+        }
+      });
+    });
   });
 }
 
