@@ -6,6 +6,9 @@ import { HISTORY_PATH, API_TOKEN_PATH, ensureMaxHome } from "../paths.js";
 
 const API_BASE = process.env.MAX_API_URL || "http://127.0.0.1:7777";
 
+// Eco mode state — fetched from API at startup
+let ecoModeActive = false;
+
 // Load API auth token (if it exists)
 let apiToken: string | null = null;
 try {
@@ -275,7 +278,7 @@ function fetchStartupInfo(): void {
     }
   };
 
-  apiGetSilent("/model", (data: any) => { model = data?.model || "unknown"; ecoMode = !!data?.ecoMode; check(); });
+  apiGetSilent("/model", (data: any) => { model = data?.model || "unknown"; ecoMode = !!data?.ecoMode; ecoModeActive = ecoMode; check(); });
   apiGetSilent("/skills", (data: any) => { skillCount = Array.isArray(data) ? data.length : 0; check(); });
 }
 
@@ -329,7 +332,11 @@ function connectSSE(): void {
                 isStreaming = false;
                 lastResponse = streamedContent;
                 streamedContent = "";
-                process.stdout.write("\n\n");
+                if (ecoModeActive) {
+                  process.stdout.write(`\n\n${LABEL_PAD}${C.green("🌿")}\n\n`);
+                } else {
+                  process.stdout.write("\n\n");
+                }
               } else {
                 // Proactive/background message — render with label
                 lastResponse = event.content;

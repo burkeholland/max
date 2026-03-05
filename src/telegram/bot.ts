@@ -136,8 +136,8 @@ export function createBot(): Bot {
       (text: string, done: boolean) => {
         if (done) {
           stopTyping();
-          // Prepend eco mode indicator when active
-          const displayText = config.ecoMode ? `🌿 ${text}` : text;
+          // Append eco mode indicator when active
+          const displayText = config.ecoMode ? `${text}\n\n🌿` : text;
           // Send final message — use chunking for long responses, reply-quote original
           void (async () => {
             const formatted = toTelegramMarkdown(displayText);
