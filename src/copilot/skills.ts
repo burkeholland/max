@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, mkdirSync, writeFileSync, existsSync } from "fs";
+import { readdirSync, readFileSync, mkdirSync, writeFileSync, existsSync, rmSync } from "fs";
 import { join, dirname } from "path";
 import { homedir } from "os";
 import { fileURLToPath } from "url";
@@ -111,6 +111,21 @@ ${instructions}
   writeFileSync(join(skillDir, "SKILL.md"), skillMd);
 
   return `Skill '${name}' created at ${skillDir}. It will be available on your next message.`;
+}
+
+/** Remove a skill from the local skills directory (~/.max/skills/). */
+export function removeSkill(slug: string): { ok: boolean; message: string } {
+  const skillDir = join(LOCAL_SKILLS_DIR, slug);
+  // Guard against path traversal
+  if (!skillDir.startsWith(LOCAL_SKILLS_DIR + "/")) {
+    return { ok: false, message: `Invalid slug '${slug}': must be a simple kebab-case name without path separators.` };
+  }
+  if (!existsSync(skillDir)) {
+    return { ok: false, message: `Skill '${slug}' not found in ${LOCAL_SKILLS_DIR}.` };
+  }
+
+  rmSync(skillDir, { recursive: true, force: true });
+  return { ok: true, message: `Skill '${slug}' removed from ${skillDir}. It will no longer be available on your next message.` };
 }
 
 /** Parse YAML frontmatter from a SKILL.md file. */
