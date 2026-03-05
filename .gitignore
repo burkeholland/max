@@ -5,7 +5,7 @@ dist/
 *.db-shm
 *.db-wal
 
-# Copilot CLI agent skills (managed by `npx skills`)
+# Global agent skills directory (read-only — Max reads these but never writes here)
 .agents/
 
 # OS

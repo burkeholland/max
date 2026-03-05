@@ -48,7 +48,9 @@ The response is JSON:
 }
 ```
 
-### Step 2: Fetch Security Audit Data
+### Step 2: Fetch Security Audit Data (REQUIRED)
+
+**You MUST fetch and display security data for every search.** Do not skip this step.
 
 Also in the worker session, fetch the audits page and extract security scores for the skills you found:
 
@@ -70,7 +72,7 @@ The audits page shows three scores per skill from independent security reviewers
 - **Socket**: Number of alerts (0 is best)
 - **Snyk**: Low Risk / Med Risk / High Risk / Critical
 
-If the audits page can't be fetched or parsed, show "N/A" in the security column and link to https://skills.sh/audits for manual review.
+If the audits page can't be fetched or parsed, show "⚠️ Audit unavailable" in the security column and link to https://skills.sh/audits so the user can check manually before installing. **Never show an empty security column.**
 
 ### Step 3: Present Results as a Table
 
@@ -90,7 +92,7 @@ Format results as a numbered table. Show the top 6-8 results. Example:
 - Sort by installs descending (the API already does this)
 - Format install counts: 1000+ → "1.0K", 1000000+ → "1.0M"
 - Security column: ✅ for Safe/Low Risk, ⚠️ for Med Risk, 🔴 for High Risk/Critical
-- If a skill has no audit data, show "—" in the security column
+- If a skill has no audit data, show "⚠️ No audit" in the security column — never leave it blank
 - The "Publisher" is the first part of the `source` field (before the `/`)
 
 After the table, show:
@@ -105,13 +107,44 @@ Which number would you like to install? (or say "none")
 
 **NEVER install a skill without explicit user confirmation.** Wait for the user to pick a number.
 
-If the user picks a number, confirm with them first, then install:
+If the user picks a number, confirm with them first, then install locally to `~/.max/skills/`:
+
+**⚠️ IMPORTANT: Never install skills globally. Always install to ~/.max/skills/ using the steps below.**
+
+1. Fetch the SKILL.md content from the skill's GitHub repository. The `source` field from the API is the GitHub `owner/repo`, and `skillId` is the directory name:
 
 ```bash
-npx skills add <source>@<skillId> -g -y
+curl -fsSL "https://raw.githubusercontent.com/{source}/main/{skillId}/SKILL.md"
 ```
 
-The `-g` flag installs globally (user-level). The source and skillId come from the API response — combine them as `source@skillId` (e.g., `vercel-labs/agent-skills@vercel-react-best-practices`).
+For example, if `source` is `vercel-labs/agent-skills` and `skillId` is `react-best-practices`:
+```bash
+curl -fsSL "https://raw.githubusercontent.com/vercel-labs/agent-skills/main/react-best-practices/SKILL.md"
+```
+
+If the `main` branch doesn't work (curl exits non-zero), try `master`:
+```bash
+curl -fsSL "https://raw.githubusercontent.com/{source}/master/{skillId}/SKILL.md"
+```
+
+If both fail, tell the user the skill couldn't be fetched and link them to `https://github.com/{source}` to investigate.
+
+2. **Validate the content before installing.** The fetched content MUST:
+   - Start with YAML frontmatter (a `---` line, then `name:` and `description:` fields, then another `---` line)
+   - Have a non-empty `name` and `description`
+   - Contain actual markdown instructions after the frontmatter
+   
+   If validation fails, do NOT install. Tell the user the skill content appears invalid.
+
+2. Parse the SKILL.md to extract the name and description from the YAML frontmatter (between `---` markers).
+
+3. Call the `learn_skill` tool with:
+   - `slug`: the `skillId` from the API response
+   - `name`: from the SKILL.md frontmatter
+   - `description`: from the SKILL.md frontmatter
+   - `instructions`: the full SKILL.md content (after the frontmatter)
+
+This saves the skill to `~/.max/skills/{slug}/SKILL.md` where Max will automatically pick it up.
 
 ### Security Review
 
@@ -137,7 +170,7 @@ If the API returns no results:
 
 1. Acknowledge that no existing skill was found
 2. Offer to help with the task directly using your general capabilities
-3. Suggest the user could create their own skill with `npx skills init`
+3. Suggest building a custom skill using the `learn_skill` tool if the task is worth automating
 
 ## Uninstalling Skills
 
