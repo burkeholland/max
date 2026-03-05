@@ -222,13 +222,24 @@ function trimHistoryFile(): void {
 ensureMaxHome();
 const history = loadHistory();
 
+let currentModel = "unknown";
+
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
-  prompt: `  ${C.coral("›")} `,
+  prompt: `  ${C.dim(currentModel)} ${C.coral("›")} `,
   history,
   historySize: MAX_HISTORY,
 });
+
+function updatePrompt(): void {
+  rl.setPrompt(`  ${C.dim(currentModel)} ${C.coral("›")} `);
+}
+
+function getPromptVisualLen(): number {
+  // "  {model} › " = 2 + model.length + 3
+  return currentModel.length + 5;
+}
 
 // ── Welcome banner ────────────────────────────────────────
 function showBanner(): void {
@@ -264,7 +275,12 @@ function fetchStartupInfo(): void {
     if (done === 2) showStatus(model, skillCount);
   };
 
-  apiGetSilent("/model", (data: any) => { model = data?.model || "unknown"; check(); });
+  apiGetSilent("/model", (data: any) => {
+    model = data?.model || "unknown";
+    currentModel = model;
+    updatePrompt();
+    check();
+  });
   apiGetSilent("/skills", (data: any) => { skillCount = Array.isArray(data) ? data.length : 0; check(); });
 }
 
@@ -327,6 +343,13 @@ function connectSSE(): void {
                 writeLabeled("max", rendered);
                 process.stdout.write("\n");
               }
+              // Refresh prompt model in case orchestrator changed it
+              apiGetSilent("/model", (data: any) => {
+                if (data?.model && data.model !== currentModel) {
+                  currentModel = data.model;
+                  updatePrompt();
+                }
+              });
               rl.prompt();
             }
           } catch {
@@ -482,6 +505,8 @@ function cmdModel(arg: string): void {
       if (data.error) {
         console.log(C.red(`  Error: ${data.error}\n`));
       } else {
+        currentModel = data.current;
+        updatePrompt();
         console.log(`  ${C.dim("model:")} ${C.dim(data.previous)} → ${C.cyan(data.current)}\n`);
       }
     });
@@ -571,7 +596,7 @@ setTimeout(() => {
 
       // Re-echo user input with YOU label, accounting for terminal wrapping
       const cols = process.stdout.columns || 80;
-      const promptVisualLen = 4; // "  › " is 4 visible chars
+      const promptVisualLen = getPromptVisualLen();
       const inputVisualLen = promptVisualLen + trimmed.length;
       const wrappedLines = Math.ceil(Math.max(inputVisualLen, 1) / cols);
       // Move up enough lines to cover all wrapped lines
