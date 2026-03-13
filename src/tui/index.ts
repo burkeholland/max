@@ -765,60 +765,15 @@ function cmdSkills(): void {
   });
 }
 
-function cmdRouter(arg: string): void {
-  if (!arg) {
-    apiGet("/router", (data: any) => {
-      if (!data) return;
-      const mode = data.enabled ? `⚡ auto` : `📌 manual`;
-      console.log(`  ${C.dim("router:")} ${C.cyan(mode)}`);
-      if (data.enabled && data.tierModels) {
-        const tm = data.tierModels;
-        if (tm.fast) console.log(`  ${C.dim("fast:")}     ${tm.fast}`);
-        if (tm.standard) console.log(`  ${C.dim("standard:")} ${tm.standard}`);
-        if (tm.premium) console.log(`  ${C.dim("premium:")}  ${tm.premium}`);
-      }
-      if (data.overrides && data.overrides.length > 0) {
-        console.log(`  ${C.dim("overrides:")}`);
-        for (const o of data.overrides) {
-          console.log(`    ${o.name || o.pattern} → ${o.model}`);
-        }
-      }
-      console.log();
+function cmdAuto(): void {
+  apiGet("/router", (data: any) => {
+    if (!data) return;
+    const newState = !data.enabled;
+    apiPost("/router", { enabled: newState }, () => {
+      const label = newState ? `${C.green("⚡")} auto` : `${C.yellow("📌")} manual`;
+      console.log(`  ${label}\n`);
     });
-    return;
-  }
-
-  if (arg === "on") {
-    apiPost("/router", { enabled: true }, () => {
-      console.log(`  ${C.green("✓")} router ${C.cyan("enabled")}\n`);
-    });
-    return;
-  }
-
-  if (arg === "off") {
-    apiPost("/router", { enabled: false }, () => {
-      console.log(`  ${C.green("✓")} router ${C.cyan("disabled")}\n`);
-    });
-    return;
-  }
-
-  if (arg.startsWith("tier ")) {
-    const parts = arg.slice(5).trim().split(/\s+/);
-    const tier = parts[0];
-    const model = parts[1];
-    if (!tier || !model || !["fast", "standard", "premium"].includes(tier)) {
-      console.log(C.yellow("  Usage: /router tier <fast|standard|premium> <model>\n"));
-      rl.prompt();
-      return;
-    }
-    apiPost("/router", { tierModels: { [tier]: model } }, () => {
-      console.log(`  ${C.green("✓")} ${tier} → ${C.cyan(model)}\n`);
-    });
-    return;
-  }
-
-  console.log(C.yellow("  Usage: /router [on|off|tier <fast|standard|premium> <model>]\n"));
-  rl.prompt();
+  });
 }
 
 function cmdHelp(): void {
@@ -826,7 +781,7 @@ function cmdHelp(): void {
   console.log(C.boldWhite("    COMMANDS"));
   console.log();
   console.log(`    ${C.coral("/model")} ${C.dim("[name]")}        show or switch model`);
-  console.log(`    ${C.coral("/router")} ${C.dim("[on|off|tier]")}  show or configure the model router`);
+  console.log(`    ${C.coral("/auto")}                 toggle auto model routing`);
   console.log(`    ${C.coral("/memory")}               show stored memories`);
   console.log(`    ${C.coral("/skills")}               list installed skills`);
   console.log(`    ${C.coral("/workers")}              list active sessions`);
@@ -918,7 +873,7 @@ setTimeout(() => {
     if (trimmed === "/cancel") { sendCancel(); return; }
     if (trimmed === "/sessions" || trimmed === "/workers") { cmdWorkers(); return; }
     if (trimmed.startsWith("/model")) { cmdModel(trimmed.slice(6).trim()); return; }
-    if (trimmed.startsWith("/router")) { cmdRouter(trimmed.slice(7).trim()); return; }
+    if (trimmed === "/auto") { cmdAuto(); return; }
     if (trimmed === "/memory") { cmdMemory(); return; }
     if (trimmed === "/skills") { cmdSkills(); return; }
     if (trimmed === "/help") { cmdHelp(); return; }
