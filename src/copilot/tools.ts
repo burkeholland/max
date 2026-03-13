@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { approveAll, defineTool, type Tool } from "@github/copilot-sdk";
+import { Readability } from "@mozilla/readability";
+import { parseHTML } from "linkedom";
+import { lookup } from "dns/promises";
+import { BlockList, isIP } from "net";
 import type { ModelProvider, AISession } from "../types/provider.js";
 import type { AppConfig } from "../types/config.js";
 import type { Store } from "../types/store.js";
@@ -31,6 +35,21 @@ const BLOCKED_WORKER_DIRS = [
 ];
 
 const MAX_CONCURRENT_WORKERS = 5;
+const FETCH_URL_TIMEOUT_MS = 10_000;
+const DEFAULT_FETCH_URL_MAX_LENGTH = 10_000;
+const MAX_FETCH_URL_MAX_LENGTH = 50_000;
+const MAX_FETCH_URL_BYTES = 1_000_000;
+const MAX_FETCH_URL_REDIRECTS = 5;
+const PRIVATE_IP_BLOCKLIST = new BlockList();
+
+PRIVATE_IP_BLOCKLIST.addSubnet("10.0.0.0", 8, "ipv4");
+PRIVATE_IP_BLOCKLIST.addSubnet("172.16.0.0", 12, "ipv4");
+PRIVATE_IP_BLOCKLIST.addSubnet("192.168.0.0", 16, "ipv4");
+PRIVATE_IP_BLOCKLIST.addSubnet("127.0.0.0", 8, "ipv4");
+PRIVATE_IP_BLOCKLIST.addSubnet("169.254.0.0", 16, "ipv4");
+PRIVATE_IP_BLOCKLIST.addAddress("::1", "ipv6");
+PRIVATE_IP_BLOCKLIST.addSubnet("fc00::", 7, "ipv6");
+PRIVATE_IP_BLOCKLIST.addSubnet("fe80::", 10, "ipv6");
 
 export interface WorkerInfo {
   name: string;
@@ -53,6 +72,183 @@ export interface ToolDeps {
   workers: Map<string, WorkerInfo>;
   onWorkerComplete: (name: string, result: string) => void;
   getCurrentSourceChannel: () => "telegram" | "tui" | undefined;
+}
+
+export function truncateSafely(text: string, maxLength: number): { text: string; truncated: boolean } {
+  const codePoints = Array.from(text);
+  if (codePoints.length <= maxLength) {
+    return { text, truncated: false };
+  }
+  return {
+    text: `${codePoints.slice(0, maxLength).join("")}\n\n[truncated to ${maxLength} characters]`,
+    truncated: true,
+  };
+}
+
+function isPrivateAddress(address: string): boolean {
+  const normalized = address.toLowerCase();
+  if (normalized === "localhost") return true;
+  if (normalized === "::1") return true;
+  const mapped = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (mapped) {
+    return PRIVATE_IP_BLOCKLIST.check(mapped[1], "ipv4");
+  }
+  const family = isIP(address);
+  if (family === 4) return PRIVATE_IP_BLOCKLIST.check(address, "ipv4");
+  if (family === 6) return PRIVATE_IP_BLOCKLIST.check(address, "ipv6");
+  return false;
+}
+
+function isRedirectStatus(status: number): boolean {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
+async function fetchWithValidatedRedirects(
+  initialUrl: URL,
+  signal: AbortSignal,
+): Promise<{ response: Response; finalUrl: string }> {
+  let currentUrl = initialUrl;
+
+  for (let redirectCount = 0; redirectCount <= MAX_FETCH_URL_REDIRECTS; redirectCount++) {
+    await assertUrlIsPublic(currentUrl);
+    const response = await fetch(currentUrl.toString(), {
+      signal,
+      redirect: "manual",
+      headers: {
+        "user-agent": "Max/1.1.0",
+      },
+    });
+
+    if (!isRedirectStatus(response.status)) {
+      return { response, finalUrl: currentUrl.toString() };
+    }
+
+    const location = response.headers.get("location");
+    if (!location) {
+      throw new Error(`Failed to fetch URL '${currentUrl.toString()}': redirect response missing location header.`);
+    }
+    currentUrl = new URL(location, currentUrl);
+  }
+
+  throw new Error(`Failed to fetch URL '${initialUrl.toString()}': too many redirects (>${MAX_FETCH_URL_REDIRECTS}).`);
+}
+
+async function assertUrlIsPublic(parsedUrl: URL): Promise<void> {
+  const host = parsedUrl.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host === "localhost") {
+    throw new Error(`Blocked URL target '${parsedUrl.toString()}': localhost is not allowed.`);
+  }
+
+  if (isIP(host)) {
+    if (isPrivateAddress(host)) {
+      throw new Error(`Blocked URL target '${parsedUrl.toString()}': private or loopback IP is not allowed.`);
+    }
+    return;
+  }
+
+  try {
+    const records = await lookup(host, { all: true, verbatim: true });
+    if (records.some((record) => isPrivateAddress(record.address))) {
+      throw new Error(`Blocked URL target '${parsedUrl.toString()}': resolves to a private or loopback IP.`);
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("Blocked URL target")) {
+      throw err;
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to resolve host '${host}': ${msg}`);
+  }
+}
+
+async function readResponseTextWithLimit(response: Response): Promise<string> {
+  const contentLengthHeader = response.headers.get("content-length");
+  if (contentLengthHeader) {
+    const contentLength = Number(contentLengthHeader);
+    if (Number.isFinite(contentLength) && contentLength > MAX_FETCH_URL_BYTES) {
+      throw new Error(`Response too large (${contentLength} bytes). Limit is ${MAX_FETCH_URL_BYTES} bytes.`);
+    }
+  }
+
+  if (!response.body) {
+    return response.text();
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let text = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalBytes += value.byteLength;
+    if (totalBytes > MAX_FETCH_URL_BYTES) {
+      await reader.cancel("response-too-large");
+      throw new Error(`Response exceeded ${MAX_FETCH_URL_BYTES} bytes and was aborted.`);
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+
+  text += decoder.decode();
+  return text;
+}
+
+export async function fetchReadableContent(
+  url: string,
+  maxLength = DEFAULT_FETCH_URL_MAX_LENGTH,
+): Promise<{ title: string; content: string; truncated: boolean; finalUrl: string }> {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    throw new Error(`Invalid URL: '${url}'. Please provide a full http(s) URL.`);
+  }
+
+  if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+    throw new Error(`Invalid URL protocol for '${url}'. Only http and https are supported.`);
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_URL_TIMEOUT_MS);
+
+  let html = "";
+  let finalUrl = parsedUrl.toString();
+  try {
+    const { response, finalUrl: resolvedUrl } = await fetchWithValidatedRedirects(parsedUrl, controller.signal);
+    finalUrl = resolvedUrl;
+    if (!response.ok) {
+      throw new Error(`Failed to fetch URL '${finalUrl}': HTTP ${response.status} ${response.statusText}.`);
+    }
+    html = await readResponseTextWithLimit(response);
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Request timed out after ${FETCH_URL_TIMEOUT_MS}ms for '${finalUrl}'.`);
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.startsWith("Blocked URL target") || msg.startsWith("Failed to fetch URL")) {
+      throw new Error(msg);
+    }
+    throw new Error(`Failed to fetch URL '${finalUrl}': ${msg}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const { document } = parseHTML(html);
+  const article = new Readability(document).parse();
+  const textContent = article?.textContent?.trim();
+  if (!textContent) {
+    throw new Error(`No readable content found at '${parsedUrl.toString()}'.`);
+  }
+
+  const normalized = textContent.replace(/\n{3,}/g, "\n\n").trim();
+  const truncated = truncateSafely(normalized, Math.min(maxLength, MAX_FETCH_URL_MAX_LENGTH));
+
+  return {
+    title: article?.title?.trim() || "(untitled)",
+    content: truncated.text,
+    truncated: truncated.truncated,
+    finalUrl,
+  };
 }
 
 export function createTools(deps: ToolDeps): Tool<any>[] {
@@ -514,6 +710,24 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
           });
         }, 1000);
         return `Restarting Max${reason}. I'll be back in a few seconds.`;
+      },
+    }),
+    defineTool("fetch_url", {
+      description:
+        "Fetch a web page by URL, extract readable article-style text, and return it for summarization or analysis.",
+      parameters: z.object({
+        url: z.string().url().describe("The URL to fetch, including http:// or https://"),
+        max_length: z.number().int().min(200).max(MAX_FETCH_URL_MAX_LENGTH).optional()
+          .describe(`Maximum number of characters to return (default: ${DEFAULT_FETCH_URL_MAX_LENGTH})`),
+      }),
+      handler: async (args) => {
+        try {
+          const result = await fetchReadableContent(args.url, args.max_length ?? DEFAULT_FETCH_URL_MAX_LENGTH);
+          return `Source: ${result.finalUrl}\nTitle: ${result.title}\n\n${result.content}`;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return `fetch_url failed: ${msg}`;
+        }
       },
     }),
   ];
