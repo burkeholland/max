@@ -41,3 +41,9 @@ export async function stopClient(): Promise<void> {
     provider = undefined;
   }
 }
+
+/** Read provider state without triggering startup work. */
+export function getProviderState(): string {
+  if (!provider) return "disconnected";
+  return provider.getState();
+}

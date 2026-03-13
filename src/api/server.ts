@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction } from "express";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { randomBytes } from "crypto";
 import { sendToOrchestrator, getWorkers, cancelCurrentMessage } from "../copilot/orchestrator.js";
+import { getProviderState } from "../copilot/client.js";
 import { sendPhoto } from "../telegram/bot.js";
 import { config, persistModel } from "../config.js";
 import { searchMemories } from "../store/db.js";
@@ -27,10 +28,11 @@ try {
 
 const app = express();
 app.use(express.json());
+const MAX_WORKER_LIMIT = 5;
 
 // Bearer token authentication middleware (skip /status health check)
 app.use((req: Request, res: Response, next: NextFunction) => {
-  if (!apiToken || req.path === "/status" || req.path === "/send-photo") return next();
+  if (!apiToken || req.path === "/status" || req.path === "/health" || req.path === "/send-photo") return next();
   const auth = req.headers.authorization;
   if (!auth || auth !== `Bearer ${apiToken}`) {
     res.status(401).json({ error: "Unauthorized" });
@@ -52,6 +54,25 @@ app.get("/status", (_req: Request, res: Response) => {
       workingDir: w.workingDir,
       status: w.status,
     })),
+  });
+});
+
+app.get("/health", (_req: Request, res: Response) => {
+  const connected = getProviderState() === "connected";
+  const workers = Array.from(getWorkers().values());
+  const channels = ["tui", ...(config.telegramEnabled ? ["telegram"] : [])];
+  res.json({
+    status: "ok",
+    uptime: Math.floor(process.uptime()),
+    copilot: {
+      connected,
+      model: config.copilotModel,
+    },
+    channels,
+    workers: {
+      active: workers.filter((w) => w.status === "running").length,
+      limit: MAX_WORKER_LIMIT,
+    },
   });
 });
 
@@ -144,8 +165,8 @@ app.post("/model", async (req: Request, res: Response) => {
   }
   // Validate against available models before persisting
   try {
-    const { getClient } = await import("../copilot/client.js");
-    const provider = await getClient();
+    const { getProvider } = await import("../copilot/client.js");
+    const provider = await getProvider();
     const models = await provider.listModels();
     const match = models.find((m) => m.id === model);
     if (!match) {

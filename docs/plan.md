@@ -39,7 +39,18 @@ This plan organizes work into three tiers:
 
 These build on the refactored architecture from Tier 1.
 
-### Q1. Health Endpoint (`/health`)
+**Phase 2 validation snapshot (2026-03-13):**
+
+| Item | Status | Notes |
+|---|---|---|
+| Q1 Health | 🟡 Partial | `/health` implemented with uptime/model/channel/worker summary; 30s auth/cooldown tracking still pending |
+| Q2 Persona | ⚪ Not started | No persona file loader or `/persona` command yet |
+| Q3 URL Fetch | ✅ Complete | `fetch_url` tool added with readability extraction + safety checks + tests |
+| Q4 FTS5 Memory | ✅ Complete | FTS5-backed memory search with `MATCH`/`bm25()` and LIKE fallback + tests |
+| Q5 Multi-Provider | ⚪ Not started | Single-provider architecture still in place |
+| Q6 Cron | ⚪ Not started | No scheduler/tooling yet |
+
+### Q1. Health Endpoint (`/health`) — 🟡 Partial
 
 Expose health status via the existing HTTP API.
 
@@ -50,7 +61,7 @@ Expose health status via the existing HTTP API.
 
 **Effort:** ~1-2 hours. **Impact:** Monitoring, debugging, operational visibility.
 
-### Q2. Persona System
+### Q2. Persona System — ⚪ Not Started
 
 Make the system prompt configurable and switchable.
 
@@ -63,7 +74,7 @@ Make the system prompt configurable and switchable.
 
 **Effort:** ~2-3 hours. **Impact:** Customization, personality, per-use-case tuning.
 
-### Q3. URL Fetch Tool
+### Q3. URL Fetch Tool — ✅ Complete
 
 Add web page summarization capability.
 
@@ -74,7 +85,7 @@ Add web page summarization capability.
 
 **Effort:** ~1-2 hours. **Impact:** Dramatically expands research capability.
 
-### Q4. FTS5 Memory Search
+### Q4. FTS5 Memory Search — ✅ Complete
 
 Upgrade keyword search to full-text search.
 
@@ -86,7 +97,7 @@ Upgrade keyword search to full-text search.
 
 **Effort:** ~1-2 hours. **Impact:** Much better memory recall accuracy.
 
-### Q5. Multiple Model Providers
+### Q5. Multiple Model Providers — ⚪ Not Started
 
 Support multiple providers active simultaneously, each with multiple models. Sessions target a specific model using the `provider/model_id` naming convention (e.g. `openai/gpt-4o`, `ollama/llama3`).
 
@@ -183,7 +194,7 @@ Any string value matching `${ENV_VAR_NAME}` is treated as an environment variabl
 
 **Effort:** ~5-7 hours. **Impact:** Multiple providers and models active simultaneously, fine-grained per-task model selection, local/private inference via Ollama, multimodal via Gemini, cost control by routing to cheaper models, zero breaking change for existing single-provider setups.
 
-### Q6. Cron Scheduling
+### Q6. Cron Scheduling — ⚪ Not Started
 
 Add scheduled task execution.
 
@@ -325,8 +336,10 @@ O8 (Security) ── depends on E4 (Channel abstraction)
 1. E1 → E2 → E3 → E4 → E5 → E6 → E7
 
 **Phase 2 — Quick Wins:**
-2. Q3 (URL Fetch — standalone, can start immediately)
-3. Q1 (Health) → Q2 (Persona) → Q4 (FTS5) → Q5 (Multi-Provider) → Q6 (Cron)
+2. ✅ Q3 (URL Fetch — complete)
+3. 🟡 Q1 (Health core endpoint complete; auth/cooldown extension pending)
+4. ✅ Q4 (FTS5 memory search complete)
+5. ⏳ Next: Q2 (Persona) → Q5 (Multi-Provider) → Q6 (Cron)
 
 **Phase 3 — Optional (pick based on need):**
 4. O1/O2 (Channels), O3 (Plugins), O4 (Vector), O5 (Skills CLI), O6 (Hono), O7 (Docker), O8 (Security)

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
+import Database from "better-sqlite3";
 import { SQLiteStore } from "../../src/store/sqlite-store.js";
 
 describe("SQLiteStore", () => {
@@ -117,6 +118,77 @@ describe("SQLiteStore", () => {
       const results = store.searchMemories("Code");
       expect(results).toHaveLength(1);
       expect(results[0].content).toContain("VS Code");
+    });
+
+    it("preserves substring keyword matches via LIKE fallback", () => {
+      store.addMemory("fact", "TypeScript is great");
+
+      const results = store.searchMemories("Type");
+      expect(results).toHaveLength(1);
+      expect(results[0].content).toBe("TypeScript is great");
+    });
+
+    it("keeps FTS index in sync for add/remove", () => {
+      const id = store.addMemory("fact", "FTS sync check");
+
+      const db = store.getRawDb();
+      const indexed = db
+        .prepare(`SELECT rowid FROM memories_fts WHERE memories_fts MATCH ?`)
+        .get("sync") as { rowid: number } | undefined;
+      expect(indexed?.rowid).toBe(id);
+
+      expect(store.removeMemory(id)).toBe(true);
+      const afterDelete = db
+        .prepare(`SELECT rowid FROM memories_fts WHERE rowid = ?`)
+        .get(id);
+      expect(afterDelete).toBeUndefined();
+    });
+
+    it("falls back to LIKE search when FTS table is unavailable", () => {
+      store.addMemory("fact", "Fallback keyword");
+      const db = store.getRawDb();
+      db.exec("DROP TABLE memories_fts");
+
+      const results = store.searchMemories("keyword");
+      expect(results).toHaveLength(1);
+      expect(results[0].content).toBe("Fallback keyword");
+    });
+
+    it("does not throw on add/remove when FTS table disappears", () => {
+      const db = store.getRawDb();
+      db.exec("DROP TABLE memories_fts");
+
+      expect(() => store.addMemory("fact", "resilient write")).not.toThrow();
+      const added = store.searchMemories("resilient");
+      expect(added).toHaveLength(1);
+
+      expect(() => store.removeMemory(added[0].id)).not.toThrow();
+      expect(store.searchMemories("resilient")).toHaveLength(0);
+    });
+
+    it("bootstraps FTS for existing memories on open", () => {
+      store.close();
+      const dbPath = join(tmpDir, "migrate.db");
+      const raw = new Database(dbPath);
+      raw.exec(`
+        CREATE TABLE memories (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          category TEXT NOT NULL CHECK(category IN ('preference', 'fact', 'project', 'person', 'routine')),
+          content TEXT NOT NULL,
+          source TEXT NOT NULL DEFAULT 'user',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          last_accessed DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      raw
+        .prepare(`INSERT INTO memories (category, content, source) VALUES (?, ?, ?)`)
+        .run("fact", "legacy bootstrap memory", "user");
+      raw.close();
+
+      store = new SQLiteStore(dbPath);
+      const results = store.searchMemories("legacy");
+      expect(results).toHaveLength(1);
+      expect(results[0].content).toBe("legacy bootstrap memory");
     });
 
     it("respects limit", () => {

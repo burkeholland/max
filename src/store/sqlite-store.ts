@@ -16,6 +16,7 @@ import type {
 export class SQLiteStore implements Store {
   private db: Database.Database;
   private logInsertCount = 0;
+  private hasFts5 = false;
 
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
@@ -73,6 +74,8 @@ export class SQLiteStore implements Store {
         last_accessed DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    this.initMemoriesFts();
 
     // Migrate: if the table already existed with a stricter CHECK, recreate it
     try {
@@ -190,6 +193,26 @@ export class SQLiteStore implements Store {
   // Long-term memory
   // ------------------------------------------------------------------
 
+  private initMemoriesFts(): void {
+    try {
+      this.db.exec(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts
+        USING fts5(
+          content,
+          category UNINDEXED,
+          content='memories',
+          content_rowid='id'
+        )
+      `);
+      this.db
+        .prepare(`INSERT INTO memories_fts(memories_fts) VALUES ('rebuild')`)
+        .run();
+      this.hasFts5 = true;
+    } catch {
+      this.hasFts5 = false;
+    }
+  }
+
   addMemory(
     category: MemoryCategory,
     content: string,
@@ -200,7 +223,21 @@ export class SQLiteStore implements Store {
         `INSERT INTO memories (category, content, source) VALUES (?, ?, ?)`,
       )
       .run(category, content, source);
-    return result.lastInsertRowid as number;
+    const id = result.lastInsertRowid as number;
+
+    if (this.hasFts5) {
+      try {
+        this.db
+          .prepare(
+            `INSERT INTO memories_fts (rowid, content, category) VALUES (?, ?, ?)`,
+          )
+          .run(id, content, category);
+      } catch {
+        this.hasFts5 = false;
+      }
+    }
+
+    return id;
   }
 
   searchMemories(
@@ -208,27 +245,49 @@ export class SQLiteStore implements Store {
     category?: string,
     limit = 20,
   ): MemoryRecord[] {
-    const conditions: string[] = [];
-    const params: (string | number)[] = [];
+    let rows: MemoryRecord[] = [];
 
-    if (keyword) {
-      conditions.push(`content LIKE ?`);
-      params.push(`%${keyword}%`);
+    if (keyword && this.hasFts5) {
+      try {
+        const params: (string | number)[] = [keyword];
+        const categoryClause = category ? `AND m.category = ?` : "";
+        if (category) params.push(category);
+        params.push(limit);
+
+        rows = this.db
+          .prepare(
+            `SELECT m.id, m.category, m.content, m.source, m.created_at
+             FROM memories_fts f
+             JOIN memories m ON m.id = f.rowid
+             WHERE memories_fts MATCH ? ${categoryClause}
+             ORDER BY bm25(memories_fts), m.last_accessed DESC
+             LIMIT ?`,
+          )
+          .all(...params) as MemoryRecord[];
+        if (rows.length === 0) {
+          rows = this.searchMemoriesLike(keyword, category, limit);
+        }
+      } catch {
+        this.hasFts5 = false;
+        rows = this.searchMemoriesLike(keyword, category, limit);
+      }
+    } else if (keyword) {
+      rows = this.searchMemoriesLike(keyword, category, limit);
+    } else {
+      const params: (string | number)[] = [];
+      const categoryClause = category ? `WHERE category = ?` : "";
+      if (category) params.push(category);
+      params.push(limit);
+      rows = this.db
+        .prepare(
+          `SELECT id, category, content, source, created_at
+           FROM memories
+           ${categoryClause}
+           ORDER BY last_accessed DESC
+           LIMIT ?`,
+        )
+        .all(...params) as MemoryRecord[];
     }
-    if (category) {
-      conditions.push(`category = ?`);
-      params.push(category);
-    }
-
-    const where =
-      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-    params.push(limit);
-
-    const rows = this.db
-      .prepare(
-        `SELECT id, category, content, source, created_at FROM memories ${where} ORDER BY last_accessed DESC LIMIT ?`,
-      )
-      .all(...params) as MemoryRecord[];
 
     if (rows.length > 0) {
       const placeholders = rows.map(() => "?").join(",");
@@ -242,10 +301,41 @@ export class SQLiteStore implements Store {
     return rows;
   }
 
+  private searchMemoriesLike(
+    keyword: string,
+    category?: string,
+    limit = 20,
+  ): MemoryRecord[] {
+    const conditions: string[] = [`content LIKE ?`];
+    const params: (string | number)[] = [`%${keyword}%`];
+    if (category) {
+      conditions.push(`category = ?`);
+      params.push(category);
+    }
+    params.push(limit);
+
+    return this.db
+      .prepare(
+        `SELECT id, category, content, source, created_at
+         FROM memories
+         WHERE ${conditions.join(" AND ")}
+         ORDER BY last_accessed DESC
+         LIMIT ?`,
+      )
+      .all(...params) as MemoryRecord[];
+  }
+
   removeMemory(id: number): boolean {
     const result = this.db
       .prepare(`DELETE FROM memories WHERE id = ?`)
       .run(id);
+    if (result.changes > 0 && this.hasFts5) {
+      try {
+        this.db.prepare(`DELETE FROM memories_fts WHERE rowid = ?`).run(id);
+      } catch {
+        this.hasFts5 = false;
+      }
+    }
     return result.changes > 0;
   }
 
