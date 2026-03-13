@@ -179,8 +179,8 @@ app.post("/model", async (req: Request, res: Response) => {
   res.json({ previous, current: model });
 });
 
-// Get router config
-app.get("/router", (_req: Request, res: Response) => {
+// Get auto-routing config
+app.get("/auto", (_req: Request, res: Response) => {
   const routerConfig = getRouterConfig();
   const lastRoute = getLastRouteResult();
   res.json({
@@ -190,8 +190,8 @@ app.get("/router", (_req: Request, res: Response) => {
   });
 });
 
-// Update router config
-app.post("/router", (req: Request, res: Response) => {
+// Update auto-routing config
+app.post("/auto", (req: Request, res: Response) => {
   const body = req.body as Partial<{
     enabled: boolean;
     tierModels: Record<string, string>;
@@ -199,6 +199,7 @@ app.post("/router", (req: Request, res: Response) => {
   }>;
 
   const updated = updateRouterConfig(body);
+  console.log(`[max] Auto-routing ${updated.enabled ? "enabled" : "disabled"}`);
 
   res.json(updated);
 });

@@ -445,7 +445,7 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
           // Disable router when manually switching — user has explicit preference
           if (getRouterConfig().enabled) {
             updateRouterConfig({ enabled: false });
-            return `Switched model from '${previous}' to '${args.model_id}'. Auto-routing disabled (use toggle_router to re-enable). Takes effect on next message.`;
+            return `Switched model from '${previous}' to '${args.model_id}'. Auto-routing disabled (use /auto or toggle_auto to re-enable). Takes effect on next message.`;
           }
 
           return `Switched model from '${previous}' to '${args.model_id}'. Takes effect on next message.`;
@@ -456,9 +456,9 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
       },
     }),
 
-    defineTool("toggle_router", {
+    defineTool("toggle_auto", {
       description:
-        "Enable or disable the automatic model router. When enabled, Max automatically picks " +
+        "Enable or disable automatic model routing (auto mode). When enabled, Max automatically picks " +
         "the best model (fast/standard/premium) for each message to save cost and optimize speed. " +
         "Use when the user asks to turn auto-routing on or off.",
       parameters: z.object({

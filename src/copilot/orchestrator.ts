@@ -323,7 +323,7 @@ async function processQueue(): Promise<void> {
       // Route the model before executing
       const routeResult = await resolveModel(item.prompt, currentSessionModel || config.copilotModel, recentTiers, copilotClient);
       if (routeResult.switched) {
-        console.log(`[max] Router: switching to ${routeResult.model} (${routeResult.overrideName || routeResult.tier})`);
+        console.log(`[max] Auto: switching to ${routeResult.model} (${routeResult.overrideName || routeResult.tier})`);
         config.copilotModel = routeResult.model;
         orchestratorSession = undefined;
         deleteState(ORCHESTRATOR_SESSION_KEY);

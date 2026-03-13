@@ -141,17 +141,20 @@ export function createBot(): Bot {
           stopTyping();
           // Send final message — use chunking for long responses, reply-quote original
           void (async () => {
-            // Append model indicator if router metadata is available
+            // Append model indicator
             const routeResult = getLastRouteResult();
             let indicatorSuffix = "";
             if (routeResult) {
-              const icon = routeResult.routerMode === "auto" ? "⚡" : "📌";
-              indicatorSuffix = `\n\n_${icon} ${routeResult.routerMode} · ${routeResult.model}_`;
+              indicatorSuffix = routeResult.routerMode === "auto"
+                ? `\n\n_⚡ auto · ${routeResult.model}_`
+                : `\n\n_${routeResult.model}_`;
             }
             const formatted = toTelegramMarkdown(text) + indicatorSuffix;
             const chunks = chunkMessage(formatted);
             const fallbackText = routeResult
-              ? text + `\n\n${routeResult.routerMode === "auto" ? "⚡" : "📌"} ${routeResult.routerMode} · ${routeResult.model}`
+              ? text + (routeResult.routerMode === "auto"
+                  ? `\n\n⚡ auto · ${routeResult.model}`
+                  : `\n\n${routeResult.model}`)
               : text;
             const fallbackChunks = chunkMessage(fallbackText);
             const sendChunk = async (chunk: string, fallback: string, isFirst: boolean) => {

@@ -352,9 +352,8 @@ function showBanner(): void {
 function showStatus(model?: string, skillCount?: number, routerInfo?: { enabled: boolean }): void {
   const parts: string[] = [];
   if (model) parts.push(`${C.dim("model:")} ${C.cyan(model)}`);
-  if (routerInfo) {
-    const mode = routerInfo.enabled ? "⚡ auto" : "📌 manual";
-    parts.push(`${C.dim("router:")} ${C.cyan(mode)}`);
+  if (routerInfo?.enabled) {
+    parts.push(C.cyan("⚡ auto"));
   }
   if (skillCount !== undefined) parts.push(`${C.dim("skills:")} ${C.cyan(String(skillCount))}`);
   if (parts.length) console.log(`    ${parts.join("    ")}`);
@@ -375,7 +374,7 @@ function fetchStartupInfo(): void {
 
   apiGetSilent("/model", (data: any) => { model = data?.model || "unknown"; check(); });
   apiGetSilent("/skills", (data: any) => { skillCount = Array.isArray(data) ? data.length : 0; check(); });
-  apiGetSilent("/router", (data: any) => { if (data) routerInfo = { enabled: Boolean(data.enabled) }; check(); });
+  apiGetSilent("/auto", (data: any) => { if (data) routerInfo = { enabled: Boolean(data.enabled) }; check(); });
 }
 
 // ── SSE connection ────────────────────────────────────────
@@ -453,11 +452,11 @@ function connectSSE(): void {
                 streamedContent = "";
                 if (event.route) {
                   const r = event.route;
-                  const icon = r.routerMode === "auto" ? "⚡" : "📌";
-                  const mode = r.routerMode || "manual";
-                  const label = r.overrideName
-                    ? `${icon} ${mode} · ${r.model} (${r.overrideName})`
-                    : `${icon} ${mode} · ${r.model}`;
+                  const label = r.routerMode === "auto"
+                    ? (r.overrideName
+                      ? `⚡ auto · ${r.model} (${r.overrideName})`
+                      : `⚡ auto · ${r.model}`)
+                    : r.model;
                   process.stdout.write(`\n${LABEL_PAD}${C.dim(label)}`);
                 }
                 process.stdout.write("\n\n\n");
@@ -766,11 +765,11 @@ function cmdSkills(): void {
 }
 
 function cmdAuto(): void {
-  apiGet("/router", (data: any) => {
-    if (!data) return;
+  apiGetSilent("/auto", (data: any) => {
+    if (!data) { rl.prompt(); return; }
     const newState = !data.enabled;
-    apiPost("/router", { enabled: newState }, () => {
-      const label = newState ? `${C.green("⚡")} auto` : `${C.yellow("📌")} manual`;
+    apiPost("/auto", { enabled: newState }, () => {
+      const label = newState ? `${C.green("⚡")} auto on` : `auto off`;
       console.log(`  ${label}\n`);
     });
   });
