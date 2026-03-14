@@ -95,6 +95,71 @@ function applyInlineFormatting(text: string): string {
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, t, u) => `${t} ${C.dim(`(${u})`)}`);
 }
 
+/** Strip ANSI escape sequences to measure visible text width. */
+function stripAnsi(str: string): string {
+  return str.replace(/\x1b\[[0-9;]*m/g, "");
+}
+
+/** Wrap ANSI-formatted text at word boundaries to fit within maxWidth visible columns. */
+function wrapText(text: string, maxWidth: number): string[] {
+  if (maxWidth <= 0 || stripAnsi(text).length <= maxWidth) return [text];
+
+  const RESET = "\x1b[0m";
+  const lines: string[] = [];
+  let remaining = text;
+
+  while (remaining.length > 0) {
+    if (stripAnsi(remaining).length <= maxWidth) {
+      lines.push(remaining);
+      break;
+    }
+
+    let visCount = 0;
+    let i = 0;
+    let lastSpaceI = -1;
+    const ansiStack: string[] = [];
+    let ansiAtSpace: string[] = [];
+
+    while (i < remaining.length && visCount < maxWidth) {
+      const match = remaining.slice(i).match(/^\x1b\[[0-9;]*m/);
+      if (match) {
+        if (match[0] === RESET) ansiStack.length = 0;
+        else ansiStack.push(match[0]);
+        i += match[0].length;
+      } else {
+        if (remaining[i] === " ") {
+          lastSpaceI = i;
+          ansiAtSpace = [...ansiStack];
+        }
+        visCount++;
+        i++;
+      }
+    }
+
+    let breakI: number;
+    let openAnsi: string[];
+    if (lastSpaceI > 0) {
+      breakI = lastSpaceI;
+      openAnsi = ansiAtSpace;
+    } else {
+      breakI = i;
+      openAnsi = [...ansiStack];
+    }
+
+    let line = remaining.slice(0, breakI);
+    remaining = remaining.slice(breakI + (remaining[breakI] === " " ? 1 : 0));
+
+    if (openAnsi.length > 0) {
+      line += RESET;
+      if (remaining.length > 0) remaining = openAnsi.join("") + remaining;
+    }
+
+    lines.push(line);
+  }
+
+  return lines;
+}
+
 /** Render a complete markdown document to ANSI (used for proactive/background messages). */
 function renderMarkdown(text: string): string {
   let inCodeBlock = false;
@@ -115,9 +180,17 @@ function writeLabeled(role: "max" | "sys", text: string): void {
   const label = role === "max"
     ? MAX_LABEL
     : `  ${C.dim("SYS")}     `;
+  const availWidth = (process.stdout.columns || 80) - 10;
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
-    process.stdout.write((i === 0 ? label : LABEL_PAD) + lines[i] + "\n");
+    const prefix = i === 0 ? label : LABEL_PAD;
+    const isCodeLine = stripAnsi(lines[i]).startsWith("  \u2502 ");
+    if (isCodeLine) {
+      process.stdout.write(prefix + lines[i] + "\n");
+    } else {
+      const wrapped = wrapText(lines[i], availWidth);
+      process.stdout.write(prefix + wrapped.join("\n" + LABEL_PAD) + "\n");
+    }
   }
 }
 
@@ -166,7 +239,13 @@ function writeRenderedStreamLine(line: string): void {
     }
   } else {
     const rendered = applyInlineFormatting(renderLine(line, inStreamCodeBlock));
-    process.stdout.write(prefix + rendered);
+    if (inStreamCodeBlock) {
+      process.stdout.write(prefix + rendered);
+    } else {
+      const availWidth = (process.stdout.columns || 80) - 10;
+      const wrapped = wrapText(rendered, availWidth);
+      process.stdout.write(prefix + wrapped.join("\n" + LABEL_PAD));
+    }
   }
   process.stdout.write("\n");
   streamIsFirstLine = false;
