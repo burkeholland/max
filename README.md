@@ -75,6 +75,7 @@ From Telegram or the TUI, just send natural language:
 | Command | Description |
 |---------|-------------|
 | `/model [name]` | Show or switch the current model |
+| `/reasoning [level]` | Show or switch the current reasoning effort when supported |
 | `/memory` | Show stored memories |
 | `/skills` | List installed skills |
 | `/workers` | List active worker sessions |
@@ -86,6 +87,35 @@ From Telegram or the TUI, just send natural language:
 | `/help` | Show help |
 | `/quit` | Exit the TUI |
 | `Escape` | Cancel a running response |
+
+### Model reasoning effort
+
+When the active model advertises reasoning-effort options, Max will:
+
+- show the current reasoning effort alongside the current model
+- default to `medium` when available (otherwise the model's advertised default, then the first supported option)
+- persist the selected reasoning effort in `~/.max/.env` as `COPILOT_REASONING`
+
+When the active model does **not** advertise reasoning efforts, Max hides reasoning fields and rejects `/reasoning` changes with:
+
+```text
+The current model <model-name> does not support reasoning efforts
+```
+
+Examples:
+
+```bash
+# TUI / Telegram
+/model gpt-5
+/reasoning high
+
+# HTTP API
+curl -H "Authorization: Bearer $(cat ~/.max/api-token)" http://127.0.0.1:7777/model
+curl -X POST -H "Authorization: Bearer $(cat ~/.max/api-token)" \
+  -H "Content-Type: application/json" \
+  -d '{"reasoning":"medium"}' \
+  http://127.0.0.1:7777/reasoning
+```
 
 ## How it Works
 

@@ -428,9 +428,15 @@ function showBanner(): void {
   console.log();
 }
 
-function showStatus(model?: string, skillCount?: number, routerInfo?: { enabled: boolean }): void {
+function showStatus(
+  model?: string,
+  skillCount?: number,
+  routerInfo?: { enabled: boolean },
+  reasoning?: string,
+): void {
   const parts: string[] = [];
   if (model) parts.push(`${C.dim("model:")} ${C.cyan(model)}`);
+  if (reasoning) parts.push(`${C.dim("reasoning:")} ${C.cyan(reasoning)}`);
   if (routerInfo?.enabled) {
     parts.push(C.cyan("⚡ auto"));
   }
@@ -443,15 +449,20 @@ function showStatus(model?: string, skillCount?: number, routerInfo?: { enabled:
 
 function fetchStartupInfo(): void {
   let model = "unknown";
+  let reasoning: string | undefined;
   let skillCount = 0;
   let routerInfo: { enabled: boolean } | undefined;
   let done = 0;
   const check = () => {
     done++;
-    if (done === 3) showStatus(model, skillCount, routerInfo);
+    if (done === 3) showStatus(model, skillCount, routerInfo, reasoning);
   };
 
-  apiGetSilent("/model", (data: any) => { model = data?.model || "unknown"; check(); });
+  apiGetSilent("/model", (data: any) => {
+    model = data?.model || "unknown";
+    reasoning = data?.reasoning;
+    check();
+  });
   apiGetSilent("/skills", (data: any) => { skillCount = Array.isArray(data) ? data.length : 0; check(); });
   apiGetSilent("/auto", (data: any) => { if (data) routerInfo = { enabled: Boolean(data.enabled) }; check(); });
 }
@@ -532,9 +543,11 @@ function connectSSE(): void {
                 if (event.route && event.route.routerMode === "auto") {
                   const r = event.route;
                   const label = r.overrideName
-                    ? `⚡ auto · ${r.model} (${r.overrideName})`
-                    : `⚡ auto · ${r.model}`;
+                    ? `⚡ auto · ${r.model}${r.reasoning ? ` · ${r.reasoning}` : ""} (${r.overrideName})`
+                    : `⚡ auto · ${r.model}${r.reasoning ? ` · ${r.reasoning}` : ""}`;
                   process.stdout.write(`\n${LABEL_PAD}${C.dim(label)}`);
+                } else if (event.route?.model) {
+                  process.stdout.write(`\n${LABEL_PAD}${C.dim(`${event.route.model}${event.route.reasoning ? ` · ${event.route.reasoning}` : ""}`)}`);
                 }
                 process.stdout.write("\n\n\n");
               } else {
@@ -751,12 +764,47 @@ function cmdModel(arg: string): void {
       if (data.error) {
         console.log(C.red(`  Error: ${data.error}\n`));
       } else {
-        console.log(`  ${C.dim("model:")} ${C.dim(data.previous)} → ${C.cyan(data.current)}\n`);
+        console.log(`  ${C.dim("model:")} ${C.dim(data.previous)} → ${C.cyan(data.current)}`);
+        if (data.reasoning && Array.isArray(data.availableReasoningEfforts)) {
+          console.log(`  ${C.dim("reasoning:")} ${C.cyan(data.reasoning)}`);
+          console.log(`  ${C.dim("available:")} ${C.cyan(data.availableReasoningEfforts.join(", "))}`);
+        }
+        console.log();
       }
     });
   } else {
     apiGet("/model", (data: any) => {
-      console.log(`  ${C.dim("model:")} ${C.cyan(data.model)}\n`);
+      console.log(`  ${C.dim("model:")} ${C.cyan(data.model)}`);
+      if (data.reasoning && Array.isArray(data.availableReasoningEfforts)) {
+        console.log(`  ${C.dim("reasoning:")} ${C.cyan(data.reasoning)}`);
+        console.log(`  ${C.dim("available:")} ${C.cyan(data.availableReasoningEfforts.join(", "))}`);
+      }
+      console.log();
+    });
+  }
+}
+
+function cmdReasoning(arg: string): void {
+  if (arg) {
+    apiPost("/reasoning", { reasoning: arg }, (data: any) => {
+      if (data.error) {
+        console.log(C.red(`  Error: ${data.error}\n`));
+      } else {
+        console.log(`  ${C.dim("reasoning:")} ${C.dim(data.previous || "(default)")} → ${C.cyan(data.current)}`);
+        if (Array.isArray(data.availableReasoningEfforts)) {
+          console.log(`  ${C.dim("available:")} ${C.cyan(data.availableReasoningEfforts.join(", "))}`);
+        }
+        console.log();
+      }
+    });
+  } else {
+    apiGet("/model", (data: any) => {
+      console.log(`  ${C.dim("model:")} ${C.cyan(data.model)}`);
+      if (data.reasoning && Array.isArray(data.availableReasoningEfforts)) {
+        console.log(`  ${C.dim("reasoning:")} ${C.cyan(data.reasoning)}`);
+        console.log(`  ${C.dim("available:")} ${C.cyan(data.availableReasoningEfforts.join(", "))}`);
+      }
+      console.log();
     });
   }
 }
@@ -857,6 +905,7 @@ function cmdHelp(): void {
   console.log(C.boldWhite("    COMMANDS"));
   console.log();
   console.log(`    ${C.coral("/model")} ${C.dim("[name]")}        show or switch model`);
+  console.log(`    ${C.coral("/reasoning")} ${C.dim("[level]")} show or switch reasoning`);
   console.log(`    ${C.coral("/auto")}                 toggle auto model routing`);
   console.log(`    ${C.coral("/memory")}               show stored memories`);
   console.log(`    ${C.coral("/skills")}               list installed skills`);
@@ -949,6 +998,7 @@ setTimeout(() => {
     if (trimmed === "/cancel") { sendCancel(); return; }
     if (trimmed === "/sessions" || trimmed === "/workers") { cmdWorkers(); return; }
     if (trimmed.startsWith("/model")) { cmdModel(trimmed.slice(6).trim()); return; }
+    if (trimmed.startsWith("/reasoning")) { cmdReasoning(trimmed.slice(10).trim()); return; }
     if (trimmed === "/auto") { cmdAuto(); return; }
     if (trimmed === "/memory") { cmdMemory(); return; }
     if (trimmed === "/skills") { cmdSkills(); return; }

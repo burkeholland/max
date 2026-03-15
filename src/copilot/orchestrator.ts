@@ -5,6 +5,7 @@ import { config, DEFAULT_MODEL } from "../config.js";
 import { loadMcpConfig } from "./mcp-config.js";
 import { getSkillDirectories } from "./skills.js";
 import { resetClient } from "./client.js";
+import { getEffectiveSelectionForModel, syncConfiguredReasoning, toSdkReasoningEffort } from "./model-settings.js";
 import { logConversation, getState, setState, deleteState, getMemorySummary, getRecentConversation } from "../store/db.js";
 import { SESSIONS_DIR } from "../paths.js";
 import { resolveModel, type Tier, type RouteResult } from "./router.js";
@@ -48,6 +49,13 @@ let lastRouteResult: RouteResult | undefined;
 
 export function getLastRouteResult(): RouteResult | undefined {
   return lastRouteResult;
+}
+
+export function invalidateOrchestratorSession(reason = "model settings updated"): void {
+  console.log(`[max] ${reason}; recreating orchestrator session on next message`);
+  orchestratorSession = undefined;
+  currentSessionModel = undefined;
+  deleteState(ORCHESTRATOR_SESSION_KEY);
 }
 
 // Persistent orchestrator session
@@ -163,6 +171,8 @@ async function createOrResumeSession(): Promise<CopilotSession> {
   const client = await ensureClient();
   const { tools, mcpServers, skillDirectories } = getSessionConfig();
   const memorySummary = getMemorySummary();
+  const selection = await getEffectiveSelectionForModel(config.copilotModel, client);
+  const reasoningEffort = toSdkReasoningEffort(selection.reasoning);
 
   const infiniteSessions = {
     enabled: true,
@@ -177,6 +187,7 @@ async function createOrResumeSession(): Promise<CopilotSession> {
       console.log(`[max] Resuming orchestrator session ${savedSessionId.slice(0, 8)}…`);
       const session = await client.resumeSession(savedSessionId, {
         model: config.copilotModel,
+        ...(reasoningEffort ? { reasoningEffort } : {}),
         configDir: SESSIONS_DIR,
         streaming: true,
         systemMessage: {
@@ -201,6 +212,7 @@ async function createOrResumeSession(): Promise<CopilotSession> {
   console.log(`[max] Creating new persistent orchestrator session`);
   const session = await client.createSession({
     model: config.copilotModel,
+    ...(reasoningEffort ? { reasoningEffort } : {}),
     configDir: SESSIONS_DIR,
     streaming: true,
     systemMessage: {
@@ -250,6 +262,8 @@ export async function initOrchestrator(client: CopilotClient): Promise<void> {
   } catch (err) {
     console.log(`[max] Could not validate model (will use '${config.copilotModel}' as-is): ${err instanceof Error ? err.message : err}`);
   }
+
+  await syncConfiguredReasoning(client);
 
   console.log(`[max] Loading ${Object.keys(mcpServers).length} MCP server(s): ${Object.keys(mcpServers).join(", ") || "(none)"}`);
   console.log(`[max] Skill directories: ${skillDirectories.join(", ") || "(none)"}`);
@@ -332,7 +346,12 @@ async function processQueue(): Promise<void> {
         recentTiers.push(routeResult.tier);
         if (recentTiers.length > 5) recentTiers = recentTiers.slice(-5);
       }
-      lastRouteResult = routeResult;
+      const selection = await getEffectiveSelectionForModel(routeResult.model, copilotClient);
+      lastRouteResult = {
+        ...routeResult,
+        ...(selection.reasoning ? { reasoning: selection.reasoning } : {}),
+        ...(selection.availableReasoningEfforts ? { availableReasoningEfforts: selection.availableReasoningEfforts } : {}),
+      };
 
       const result = await executeOnSession(item.prompt, item.callback);
       item.resolve(result);

@@ -12,6 +12,7 @@ const configSchema = z.object({
   AUTHORIZED_USER_ID: z.string().min(1).optional(),
   API_PORT: z.string().optional(),
   COPILOT_MODEL: z.string().optional(),
+  COPILOT_REASONING: z.string().optional(),
   WORKER_TIMEOUT: z.string().optional(),
 });
 
@@ -41,6 +42,7 @@ if (!Number.isInteger(parsedWorkerTimeout) || parsedWorkerTimeout <= 0) {
 export const DEFAULT_MODEL = "claude-sonnet-4.6";
 
 let _copilotModel = raw.COPILOT_MODEL || DEFAULT_MODEL;
+let _copilotReasoning = raw.COPILOT_REASONING;
 
 export const config = {
   telegramBotToken: raw.TELEGRAM_BOT_TOKEN,
@@ -52,6 +54,12 @@ export const config = {
   },
   set copilotModel(model: string) {
     _copilotModel = model;
+  },
+  get copilotReasoning(): string | undefined {
+    return _copilotReasoning;
+  },
+  set copilotReasoning(reasoning: string | undefined) {
+    _copilotReasoning = reasoning;
   },
   get telegramEnabled(): boolean {
     return !!this.telegramBotToken && this.authorizedUserId !== undefined;
@@ -86,4 +94,9 @@ function persistEnvVar(key: string, value: string): void {
 /** Persist the current model choice to ~/.max/.env */
 export function persistModel(model: string): void {
   persistEnvVar("COPILOT_MODEL", model);
+}
+
+/** Persist the current reasoning choice to ~/.max/.env */
+export function persistReasoning(reasoning: string): void {
+  persistEnvVar("COPILOT_REASONING", reasoning);
 }

@@ -2,10 +2,11 @@ import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { randomBytes } from "crypto";
-import { sendToOrchestrator, getWorkers, cancelCurrentMessage, getLastRouteResult } from "../copilot/orchestrator.js";
+import { sendToOrchestrator, getWorkers, cancelCurrentMessage, getLastRouteResult, invalidateOrchestratorSession } from "../copilot/orchestrator.js";
 import { sendPhoto } from "../telegram/bot.js";
-import { config, persistModel } from "../config.js";
+import { config } from "../config.js";
 import { getRouterConfig, updateRouterConfig } from "../copilot/router.js";
+import { getActiveModelSelection, setConfiguredReasoningEffort, switchConfiguredModel } from "../copilot/model-settings.js";
 import { searchMemories } from "../store/db.js";
 import { listSkills, removeSkill } from "../copilot/skills.js";
 import { restartDaemon } from "../daemon.js";
@@ -122,6 +123,7 @@ app.post("/message", (req: Request, res: Response) => {
               model: routeResult.model,
               routerMode: routeResult.routerMode,
               tier: routeResult.tier,
+              ...(routeResult.reasoning ? { reasoning: routeResult.reasoning } : {}),
               ...(routeResult.overrideName ? { overrideName: routeResult.overrideName } : {}),
             };
           }
@@ -147,8 +149,9 @@ app.post("/cancel", async (_req: Request, res: Response) => {
 });
 
 // Get or switch model
-app.get("/model", (_req: Request, res: Response) => {
-  res.json({ model: config.copilotModel });
+app.get("/model", async (_req: Request, res: Response) => {
+  const selection = await getActiveModelSelection();
+  res.json(selection);
 });
 app.post("/model", async (req: Request, res: Response) => {
   const { model } = req.body as { model?: string };
@@ -156,27 +159,36 @@ app.post("/model", async (req: Request, res: Response) => {
     res.status(400).json({ error: "Missing 'model' in request body" });
     return;
   }
-  // Validate against available models before persisting
   try {
-    const { getClient } = await import("../copilot/client.js");
-    const client = await getClient();
-    const models = await client.listModels();
-    const match = models.find((m) => m.id === model);
-    if (!match) {
-      const suggestions = models
-        .filter((m) => m.id.includes(model) || m.id.toLowerCase().includes(model.toLowerCase()))
-        .map((m) => m.id);
-      const hint = suggestions.length > 0 ? ` Did you mean: ${suggestions.join(", ")}?` : "";
-      res.status(400).json({ error: `Model '${model}' not found.${hint}` });
-      return;
+    const result = await switchConfiguredModel(model);
+    invalidateOrchestratorSession(`model switched to '${result.current}'`);
+    console.log(`[max] Model switched: ${result.previous} → ${result.current}`);
+    if (result.reasoning) {
+      console.log(`[max] Reasoning defaulted: ${result.reasoning} (${result.availableReasoningEfforts?.join(", ") || "unknown options"})`);
     }
-  } catch {
-    // If we can't validate (client not ready), allow the switch — it'll fail on next message if wrong
+    res.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(400).json({ error: message });
   }
-  const previous = config.copilotModel;
-  config.copilotModel = model;
-  persistModel(model);
-  res.json({ previous, current: model });
+});
+
+app.post("/reasoning", async (req: Request, res: Response) => {
+  const { reasoning } = req.body as { reasoning?: string };
+  if (!reasoning || typeof reasoning !== "string") {
+    res.status(400).json({ error: "Missing 'reasoning' in request body" });
+    return;
+  }
+
+  try {
+    const result = await setConfiguredReasoningEffort(reasoning);
+    invalidateOrchestratorSession(`reasoning switched to '${result.current}'`);
+    console.log(`[max] Reasoning changed for ${result.model}: ${result.previous || "(default)"} → ${result.current}`);
+    res.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(400).json({ error: message });
+  }
 });
 
 // Get auto-routing config
