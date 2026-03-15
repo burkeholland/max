@@ -1,12 +1,26 @@
 import { Bot, type Context } from "grammy";
-import { config, persistModel } from "../config.js";
-import { sendToOrchestrator, cancelCurrentMessage, getWorkers, getLastRouteResult } from "../copilot/orchestrator.js";
+import { config } from "../config.js";
+import { sendToOrchestrator, cancelCurrentMessage, getWorkers, getLastRouteResult, invalidateOrchestratorSession } from "../copilot/orchestrator.js";
+import { getActiveModelSelection, setConfiguredReasoningEffort, switchConfiguredModel } from "../copilot/model-settings.js";
 import { chunkMessage, toTelegramMarkdown } from "./formatter.js";
 import { searchMemories } from "../store/db.js";
 import { listSkills } from "../copilot/skills.js";
 import { restartDaemon } from "../daemon.js";
 
 let bot: Bot | undefined;
+
+function formatModelReply(selection: {
+  model: string;
+  reasoning?: string;
+  availableReasoningEfforts?: string[];
+}): string {
+  const lines = [`Current model: ${selection.model}`];
+  if (selection.reasoning && selection.availableReasoningEfforts?.length) {
+    lines.push(`Reasoning: ${selection.reasoning}`);
+    lines.push(`Available reasoning: ${selection.availableReasoningEfforts.join(", ")}`);
+  }
+  return lines.join("\n");
+}
 
 export function createBot(): Bot {
   if (!config.telegramBotToken) {
@@ -35,6 +49,8 @@ export function createBot(): Bot {
         "/cancel — Cancel the current message\n" +
         "/model — Show current model\n" +
         "/model <name> — Switch model\n" +
+        "/reasoning — Show current reasoning\n" +
+        "/reasoning <level> — Switch reasoning effort\n" +
         "/memory — Show stored memories\n" +
         "/skills — List installed skills\n" +
         "/workers — List active worker sessions\n" +
@@ -49,29 +65,50 @@ export function createBot(): Bot {
   bot.command("model", async (ctx) => {
     const arg = ctx.match?.trim();
     if (arg) {
-      // Validate against available models before persisting
       try {
-        const { getClient } = await import("../copilot/client.js");
-        const client = await getClient();
-        const models = await client.listModels();
-        const match = models.find((m) => m.id === arg);
-        if (!match) {
-          const suggestions = models
-            .filter((m) => m.id.includes(arg) || m.id.toLowerCase().includes(arg.toLowerCase()))
-            .map((m) => m.id);
-          const hint = suggestions.length > 0 ? ` Did you mean: ${suggestions.join(", ")}?` : "";
-          await ctx.reply(`Model '${arg}' not found.${hint}`);
-          return;
+        const result = await switchConfiguredModel(arg);
+        invalidateOrchestratorSession(`model switched to '${result.current}'`);
+        const lines = [`Model: ${result.previous} → ${result.current}`];
+        if (result.reasoning && result.availableReasoningEfforts?.length) {
+          lines.push(`Reasoning: ${result.reasoning}`);
+          lines.push(`Available reasoning: ${result.availableReasoningEfforts.join(", ")}`);
         }
-      } catch {
-        // If validation fails (client not ready), allow the switch — will fail on next message if wrong
+        await ctx.reply(lines.join("\n"));
+      } catch (err) {
+        await ctx.reply(err instanceof Error ? err.message : String(err));
       }
-      const previous = config.copilotModel;
-      config.copilotModel = arg;
-      persistModel(arg);
-      await ctx.reply(`Model: ${previous} → ${arg}`);
     } else {
-      await ctx.reply(`Current model: ${config.copilotModel}`);
+      await ctx.reply(formatModelReply(await getActiveModelSelection()));
+    }
+  });
+  bot.command("reasoning", async (ctx) => {
+    const arg = ctx.match?.trim();
+    if (arg) {
+      try {
+        const result = await setConfiguredReasoningEffort(arg);
+        invalidateOrchestratorSession(`reasoning switched to '${result.current}'`);
+        await ctx.reply(
+          [
+            `Reasoning: ${result.previous || "(default)"} → ${result.current}`,
+            `Available reasoning: ${result.availableReasoningEfforts?.join(", ") || "none"}`,
+          ].join("\n"),
+        );
+      } catch (err) {
+        await ctx.reply(err instanceof Error ? err.message : String(err));
+      }
+    } else {
+      const selection = await getActiveModelSelection();
+      if (selection.reasoning && selection.availableReasoningEfforts?.length) {
+        await ctx.reply(
+          [
+            `Current model: ${selection.model}`,
+            `Reasoning: ${selection.reasoning}`,
+            `Available reasoning: ${selection.availableReasoningEfforts.join(", ")}`,
+          ].join("\n"),
+        );
+      } else {
+        await ctx.reply(`Current model: ${selection.model}`);
+      }
     }
   });
   bot.command("memory", async (ctx) => {
@@ -145,16 +182,19 @@ export function createBot(): Bot {
             const routeResult = getLastRouteResult();
             let indicatorSuffix = "";
             if (routeResult) {
-              indicatorSuffix = routeResult.routerMode === "auto"
-                ? `\n\n_⚡ auto · ${routeResult.model}_`
-                : `\n\n_${routeResult.model}_`;
+              const label = routeResult.routerMode === "auto"
+                ? `⚡ auto · ${routeResult.model}${routeResult.reasoning ? ` · ${routeResult.reasoning}` : ""}`
+                : `${routeResult.model}${routeResult.reasoning ? ` · ${routeResult.reasoning}` : ""}`;
+              indicatorSuffix = `\n\n_${label}_`;
             }
             const formatted = toTelegramMarkdown(text) + indicatorSuffix;
             const chunks = chunkMessage(formatted);
             const fallbackText = routeResult
-              ? text + (routeResult.routerMode === "auto"
-                  ? `\n\n⚡ auto · ${routeResult.model}`
-                  : `\n\n${routeResult.model}`)
+              ? text + "\n\n" + (
+                routeResult.routerMode === "auto"
+                  ? `⚡ auto · ${routeResult.model}${routeResult.reasoning ? ` · ${routeResult.reasoning}` : ""}`
+                  : `${routeResult.model}${routeResult.reasoning ? ` · ${routeResult.reasoning}` : ""}`
+              )
               : text;
             const fallbackChunks = chunkMessage(fallbackText);
             const sendChunk = async (chunk: string, fallback: string, isFirst: boolean) => {

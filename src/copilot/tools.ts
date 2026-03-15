@@ -5,10 +5,11 @@ import { readdirSync, readFileSync, statSync } from "fs";
 import { join, sep, resolve } from "path";
 import { homedir } from "os";
 import { listSkills, createSkill, removeSkill } from "./skills.js";
-import { config, persistModel } from "../config.js";
+import { config } from "../config.js";
 import { SESSIONS_DIR } from "../paths.js";
-import { getCurrentSourceChannel } from "./orchestrator.js";
+import { getCurrentSourceChannel, invalidateOrchestratorSession } from "./orchestrator.js";
 import { getRouterConfig, updateRouterConfig } from "./router.js";
+import { getActiveModelSelection, setConfiguredReasoningEffort, switchConfiguredModel } from "./model-settings.js";
 
 function isTimeoutError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
@@ -403,13 +404,20 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
           if (models.length === 0) {
             return "No models available.";
           }
-          const current = config.copilotModel;
+          const currentSelection = await getActiveModelSelection(deps.client);
+          const current = currentSelection.model;
           const lines = models.map((m) => {
             const active = m.id === current ? " ← active" : "";
             const billing = m.billing ? ` (${m.billing.multiplier}x)` : "";
-            return `• ${m.id}${billing}${active}`;
+            const reasoning = Array.isArray(m.supportedReasoningEfforts) && m.supportedReasoningEfforts.length > 0
+              ? ` [reasoning: ${m.supportedReasoningEfforts.join(", ")}]`
+              : "";
+            return `• ${m.id}${billing}${reasoning}${active}`;
           });
-          return `Available models (${models.length}):\n${lines.join("\n")}\n\nCurrent: ${current}`;
+          const currentReasoning = currentSelection.reasoning && currentSelection.availableReasoningEfforts?.length
+            ? `\nReasoning: ${currentSelection.reasoning} (${currentSelection.availableReasoningEfforts.join(", ")})`
+            : "";
+          return `Available models (${models.length}):\n${lines.join("\n")}\n\nCurrent: ${current}${currentReasoning}`;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           return `Failed to list models: ${msg}`;
@@ -426,32 +434,43 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
       }),
       handler: async (args) => {
         try {
-          const models = await deps.client.listModels();
-          const match = models.find((m) => m.id === args.model_id);
-          if (!match) {
-            const suggestions = models
-              .filter((m) => m.id.includes(args.model_id) || m.id.toLowerCase().includes(args.model_id.toLowerCase()))
-              .map((m) => m.id);
-            const hint = suggestions.length > 0
-              ? ` Did you mean: ${suggestions.join(", ")}?`
-              : " Use list_models to see available options.";
-            return `Model '${args.model_id}' not found.${hint}`;
-          }
-
-          const previous = config.copilotModel;
-          config.copilotModel = args.model_id;
-          persistModel(args.model_id);
+          const result = await switchConfiguredModel(args.model_id, deps.client);
+          invalidateOrchestratorSession(`model switched to '${result.current}'`);
 
           // Disable router when manually switching — user has explicit preference
           if (getRouterConfig().enabled) {
             updateRouterConfig({ enabled: false });
-            return `Switched model from '${previous}' to '${args.model_id}'. Auto-routing disabled (use /auto or toggle_auto to re-enable). Takes effect on next message.`;
+            return `Switched model from '${result.previous}' to '${result.current}'` +
+              `${result.reasoning && result.availableReasoningEfforts?.length ? ` with reasoning '${result.reasoning}' (${result.availableReasoningEfforts.join(", ")})` : ""}. ` +
+              `Auto-routing disabled (use /auto or toggle_auto to re-enable). Takes effect on next message.`;
           }
 
-          return `Switched model from '${previous}' to '${args.model_id}'. Takes effect on next message.`;
+          return `Switched model from '${result.previous}' to '${result.current}'` +
+            `${result.reasoning && result.availableReasoningEfforts?.length ? ` with reasoning '${result.reasoning}' (${result.availableReasoningEfforts.join(", ")})` : ""}. ` +
+            `Takes effect on next message.`;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           return `Failed to switch model: ${msg}`;
+        }
+      },
+    }),
+
+    defineTool("switch_reasoning", {
+      description:
+        "Switch the reasoning effort for the current Copilot model when that model supports it. " +
+        "Use when the user asks for low/medium/high reasoning. Report available options on success or failure.",
+      parameters: z.object({
+        reasoning: z.string().describe("The exact reasoning effort label to use"),
+      }),
+      handler: async (args) => {
+        try {
+          const result = await setConfiguredReasoningEffort(args.reasoning, deps.client);
+          invalidateOrchestratorSession(`reasoning switched to '${result.current}'`);
+          return `Switched reasoning for '${result.model}' from '${result.previous || "(default)"}' to '${result.current}'. ` +
+            `Available options: ${result.availableReasoningEfforts?.join(", ") || "none"}. Takes effect on next message.`;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return `Failed to switch reasoning: ${msg}`;
         }
       },
     }),
