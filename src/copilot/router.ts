@@ -27,6 +27,8 @@ export interface RouteResult {
   overrideName?: string;
   switched: boolean;
   routerMode: "auto" | "manual";
+  reasoning?: string;
+  availableReasoningEfforts?: string[];
 }
 
 // ---------------------------------------------------------------------------
