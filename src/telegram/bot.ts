@@ -5,6 +5,7 @@ import { chunkMessage, toTelegramMarkdown } from "./formatter.js";
 import { searchMemories } from "../store/db.js";
 import { listSkills } from "../copilot/skills.js";
 import { restartDaemon } from "../daemon.js";
+import { getRouterConfig, updateRouterConfig } from "../copilot/router.js";
 
 let bot: Bot | undefined;
 
@@ -35,6 +36,7 @@ export function createBot(): Bot {
         "/cancel — Cancel the current message\n" +
         "/model — Show current model\n" +
         "/model <name> — Switch model\n" +
+        "/auto — Toggle auto model routing\n" +
         "/memory — Show stored memories\n" +
         "/skills — List installed skills\n" +
         "/workers — List active worker sessions\n" +
@@ -108,6 +110,15 @@ export function createBot(): Bot {
         console.error("[max] Restart failed:", err);
       });
     }, 500);
+  });
+  bot.command("auto", async (ctx) => {
+    const current = getRouterConfig();
+    const newState = !current.enabled;
+    updateRouterConfig({ enabled: newState });
+    const label = newState
+      ? "⚡ Auto mode on"
+      : `Auto mode off · using ${config.copilotModel}`;
+    await ctx.reply(label);
   });
 
   // Handle all text messages
