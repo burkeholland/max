@@ -2,10 +2,15 @@ import { getClient, stopClient } from "./copilot/client.js";
 import { initOrchestrator, setMessageLogger, setProactiveNotify, getWorkers } from "./copilot/orchestrator.js";
 import { startApiServer, broadcastToSSE } from "./api/server.js";
 import { createBot, startBot, stopBot, sendProactiveMessage } from "./telegram/bot.js";
-import { getDb, closeDb } from "./store/db.js";
+import { getDb, closeDb, getState, setState } from "./store/db.js";
 import { config } from "./config.js";
 import { spawn } from "child_process";
-import { checkForUpdate } from "./update.js";
+import { checkForUpdate, getWhatsNew } from "./update.js";
+import { readFileSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function truncate(text: string, max = 200): string {
   const oneLine = text.replace(/\n/g, " ").trim();
@@ -66,6 +71,30 @@ async function main(): Promise<void> {
   }
 
   console.log("[max] Max is fully operational.");
+
+  // What's new — notify user on first start after a version bump
+  try {
+    const pkgVersion: string = JSON.parse(
+      readFileSync(join(__dirname, "..", "package.json"), "utf-8")
+    ).version ?? "0.0.0";
+    const lastNotified = getState("last_notified_version");
+    if (!lastNotified) {
+      // First-ever install — record version silently, nothing to announce yet
+      setState("last_notified_version", pkgVersion);
+    } else if (lastNotified !== pkgVersion) {
+      const message = getWhatsNew(lastNotified, pkgVersion);
+      if (message) {
+        // Deliver to all channels — broadcastToSSE covers TUI, sendProactiveMessage covers Telegram
+        broadcastToSSE(message);
+        if (config.telegramEnabled) {
+          sendProactiveMessage(message).catch(() => {});
+        }
+      }
+      setState("last_notified_version", pkgVersion);
+    }
+  } catch (err) {
+    console.error("[max] What's new check failed (non-fatal):", err instanceof Error ? err.message : err);
+  }
 
   // Non-blocking update check
   checkForUpdate()
