@@ -34,7 +34,7 @@ export interface RouteResult {
 // ---------------------------------------------------------------------------
 
 const DEFAULT_CONFIG: RouterConfig = {
-  enabled: true,
+  enabled: false,
   tierModels: {
     fast: "gpt-4.1",
     standard: "claude-sonnet-4.6",
