@@ -418,6 +418,20 @@ function isRecoverableError(err: unknown): boolean {
   return /timeout|disconnect|connection|EPIPE|ECONNRESET|ECONNREFUSED|socket|closed|ENOENT|spawn|not found|expired|stale/i.test(msg);
 }
 
+/** Extract a short descriptive slug from a prompt for worker naming. */
+function slugifyPrompt(prompt: string): string {
+  const STOP_WORDS = new Set(["the", "a", "an", "is", "it", "to", "in", "on", "of", "for", "and", "or", "my", "me", "do", "can", "you", "via", "tui", "telegram"]);
+  return prompt
+    .replace(/^\[.*?\]\s*/, "")        // strip channel tags like [via telegram]
+    .replace(/[^a-zA-Z0-9\s]/g, " ")  // remove punctuation
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 1 && !STOP_WORDS.has(w))
+    .slice(0, 4)
+    .join("-")
+    || "task";
+}
+
 /** Auto-delegate a prompt to a background worker (used by watchdog and queue starvation). */
 async function autoDelegate(prompt: string, sourceChannel?: "telegram" | "tui"): Promise<void> {
   // Check total active + pending slots to prevent over-spawning
@@ -435,7 +449,7 @@ async function autoDelegate(prompt: string, sourceChannel?: "telegram" | "tui"):
 
   // Reserve a slot synchronously before any async work to prevent race conditions
   pendingWorkerSlots++;
-  const workerName = `auto-${++autoWorkerCounter}`;
+  const workerName = `auto-${++autoWorkerCounter}-${slugifyPrompt(prompt)}`;
   const workingDir = process.cwd();
 
   let session: CopilotSession;
