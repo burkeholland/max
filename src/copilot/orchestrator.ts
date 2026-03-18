@@ -320,12 +320,22 @@ async function executeOnSession(prompt: string, callback: MessageCallback): Prom
   try {
     const result = await session.sendAndWait({ prompt }, ORCHESTRATOR_SEND_TIMEOUT_MS);
     clearTimeout(watchdogTimer);
+
+    // session.abort() can cause sendAndWait to resolve (not reject) with
+    // undefined or empty content. Detect this and trigger auto-delegation.
+    if (watchdogFired) {
+      throw new WatchdogTimeoutError(prompt);
+    }
+
     const finalContent = result?.data?.content || accumulated || "(No response)";
     return finalContent;
   } catch (err) {
     clearTimeout(watchdogTimer);
 
     // If the watchdog triggered the abort, throw WatchdogTimeoutError for auto-delegation
+    if (err instanceof WatchdogTimeoutError) {
+      throw err;
+    }
     if (watchdogFired) {
       throw new WatchdogTimeoutError(prompt);
     }
@@ -454,8 +464,15 @@ async function autoDelegate(prompt: string, sourceChannel?: "telegram" | "tui"):
   workers.set(workerName, worker);
   console.log(`[max] Auto-delegated to worker '${workerName}' (${workers.size}/${MAX_CONCURRENT_WORKERS} workers active)`);
 
+  // Inject recent conversation context so the worker understands follow-up
+  // messages like "do it" or "yes" that reference prior orchestrator turns.
+  const recentContext = getRecentConversation(10);
+  const contextualPrompt = recentContext
+    ? `[Context from recent conversation — use this to understand what the user is referring to]\n\n${recentContext}\n\n[Current request]\n${prompt}`
+    : prompt;
+
   // Fire-and-forget: dispatch work, feed results back on completion
-  session.sendAndWait({ prompt }, WORKER_SEND_TIMEOUT_MS)
+  session.sendAndWait({ prompt: contextualPrompt }, WORKER_SEND_TIMEOUT_MS)
     .then((result) => {
       worker.lastOutput = result?.data?.content || "No response";
       feedBackgroundResult(workerName, worker.lastOutput);
