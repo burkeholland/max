@@ -29,13 +29,13 @@ if (Number.isNaN(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
   throw new Error(`API_PORT must be 1-65535, got: "${raw.API_PORT}"`);
 }
 
-const DEFAULT_WORKER_TIMEOUT_MS = 600_000; // 10 minutes
+const DEFAULT_WORKER_TIMEOUT_MS = 0; // 0 = unlimited (workers can run for hours)
 const parsedWorkerTimeout = raw.WORKER_TIMEOUT
   ? Number(raw.WORKER_TIMEOUT)
   : DEFAULT_WORKER_TIMEOUT_MS;
 
-if (!Number.isInteger(parsedWorkerTimeout) || parsedWorkerTimeout <= 0) {
-  throw new Error(`WORKER_TIMEOUT must be a positive integer (ms), got: "${raw.WORKER_TIMEOUT}"`);
+if (!Number.isInteger(parsedWorkerTimeout) || parsedWorkerTimeout < 0) {
+  throw new Error(`WORKER_TIMEOUT must be a non-negative integer (ms, 0 = unlimited), got: "${raw.WORKER_TIMEOUT}"`);
 }
 
 export const DEFAULT_MODEL = "claude-sonnet-4.6";

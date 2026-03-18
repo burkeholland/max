@@ -12,6 +12,9 @@ import { resolveModel, type Tier, type RouteResult } from "./router.js";
 const MAX_RETRIES = 3;
 const RECONNECT_DELAYS_MS = [1_000, 3_000, 10_000];
 const HEALTH_CHECK_INTERVAL_MS = 30_000;
+const WATCHDOG_TIMEOUT_MS = 20_000; // Auto-delegate if orchestrator turn exceeds 20s
+const ORCHESTRATOR_SEND_TIMEOUT_MS = 30_000; // sendAndWait timeout (aligned with watchdog)
+const WORKER_SEND_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24h — effectively unlimited for workers
 
 const ORCHESTRATOR_SESSION_KEY = "orchestrator_session_id";
 
@@ -39,7 +42,10 @@ export function setProactiveNotify(fn: ProactiveNotifyFn): void {
 
 let copilotClient: CopilotClient | undefined;
 const workers = new Map<string, WorkerInfo>();
+const MAX_CONCURRENT_WORKERS = 5;
 let healthCheckTimer: ReturnType<typeof setInterval> | undefined;
+let autoWorkerCounter = 0; // Monotonic counter for collision-free worker names
+let pendingWorkerSlots = 0; // Tracks in-flight autoDelegate calls not yet in workers Map
 
 // Router state — tracks model across the session
 let currentSessionModel: string | undefined;
@@ -62,12 +68,27 @@ type QueuedMessage = {
   sourceChannel?: "telegram" | "tui";
   resolve: (value: string) => void;
   reject: (err: unknown) => void;
+  enqueuedAt: number;
 };
 const messageQueue: QueuedMessage[] = [];
 let processing = false;
 let currentCallback: MessageCallback | undefined;
 /** The channel currently being processed — tools use this to tag new workers. */
 let currentSourceChannel: "telegram" | "tui" | undefined;
+
+/** Thrown when the orchestrator watchdog aborts a turn that took too long. */
+class WatchdogTimeoutError extends Error {
+  constructor(public readonly originalPrompt: string) {
+    super("Orchestrator watchdog timeout — auto-delegating to background worker");
+  }
+}
+
+// Worker overflow queue — holds requests when all 5 workers are busy
+type OverflowItem = {
+  prompt: string;
+  sourceChannel?: "telegram" | "tui";
+};
+const workerOverflowQueue: OverflowItem[] = [];
 
 /** Get the channel that originated the message currently being processed. */
 export function getCurrentSourceChannel(): "telegram" | "tui" | undefined {
@@ -271,6 +292,8 @@ async function executeOnSession(prompt: string, callback: MessageCallback): Prom
 
   let accumulated = "";
   let toolCallExecuted = false;
+  let watchdogFired = false;
+
   const unsubToolDone = session.on("tool.execution_complete", () => {
     toolCallExecuted = true;
   });
@@ -285,11 +308,28 @@ async function executeOnSession(prompt: string, callback: MessageCallback): Prom
     callback(accumulated, false);
   });
 
+  // Watchdog: auto-abort if orchestrator turn takes too long
+  const watchdogTimer = setTimeout(() => {
+    watchdogFired = true;
+    console.log(`[max] ⚠ Watchdog: orchestrator turn exceeded ${WATCHDOG_TIMEOUT_MS / 1000}s — aborting and auto-delegating`);
+    session.abort().catch((err) => {
+      console.error(`[max] Watchdog abort failed:`, err instanceof Error ? err.message : err);
+    });
+  }, WATCHDOG_TIMEOUT_MS);
+
   try {
-    const result = await session.sendAndWait({ prompt }, 300_000);
+    const result = await session.sendAndWait({ prompt }, ORCHESTRATOR_SEND_TIMEOUT_MS);
+    clearTimeout(watchdogTimer);
     const finalContent = result?.data?.content || accumulated || "(No response)";
     return finalContent;
   } catch (err) {
+    clearTimeout(watchdogTimer);
+
+    // If the watchdog triggered the abort, throw WatchdogTimeoutError for auto-delegation
+    if (watchdogFired) {
+      throw new WatchdogTimeoutError(prompt);
+    }
+
     // If the session is broken, invalidate it so it's recreated on next attempt
     const msg = err instanceof Error ? err.message : String(err);
     if (/closed|destroy|disposed|invalid|expired|not found/i.test(msg)) {
@@ -316,38 +356,131 @@ async function processQueue(): Promise<void> {
   }
   processing = true;
 
-  while (messageQueue.length > 0) {
-    const item = messageQueue.shift()!;
-    currentSourceChannel = item.sourceChannel;
-    try {
-      // Route the model before executing
-      const routeResult = await resolveModel(item.prompt, currentSessionModel || config.copilotModel, recentTiers, copilotClient);
-      if (routeResult.switched) {
-        console.log(`[max] Auto: switching to ${routeResult.model} (${routeResult.overrideName || routeResult.tier})`);
-        config.copilotModel = routeResult.model;
-        orchestratorSession = undefined;
-        deleteState(ORCHESTRATOR_SESSION_KEY);
-      }
-      if (routeResult.tier) {
-        recentTiers.push(routeResult.tier);
-        if (recentTiers.length > 5) recentTiers = recentTiers.slice(-5);
-      }
-      lastRouteResult = routeResult;
+  try {
+    while (messageQueue.length > 0) {
+      const item = messageQueue.shift()!;
+      currentSourceChannel = item.sourceChannel;
+      try {
+        // Route the model before executing
+        const routeResult = await resolveModel(item.prompt, currentSessionModel || config.copilotModel, recentTiers, copilotClient);
+        if (routeResult.switched) {
+          console.log(`[max] Auto: switching to ${routeResult.model} (${routeResult.overrideName || routeResult.tier})`);
+          config.copilotModel = routeResult.model;
+          orchestratorSession = undefined;
+          deleteState(ORCHESTRATOR_SESSION_KEY);
+        }
+        if (routeResult.tier) {
+          recentTiers.push(routeResult.tier);
+          if (recentTiers.length > 5) recentTiers = recentTiers.slice(-5);
+        }
+        lastRouteResult = routeResult;
 
-      const result = await executeOnSession(item.prompt, item.callback);
-      item.resolve(result);
-    } catch (err) {
-      item.reject(err);
+        const result = await executeOnSession(item.prompt, item.callback);
+        item.resolve(result);
+      } catch (err) {
+        // Watchdog fired — auto-delegate to a background worker
+        if (err instanceof WatchdogTimeoutError) {
+          console.log(`[max] Watchdog: auto-delegating to background worker`);
+          const ack = "This is taking a bit — I'm handing it off to a background worker. I'll get back to you when it's done.";
+          // Resolve with ack — sendToOrchestrator will deliver it via callback
+          item.resolve(ack);
+          try {
+            await autoDelegate(err.originalPrompt, item.sourceChannel);
+          } catch (delegateErr) {
+            console.error(`[max] Watchdog auto-delegate failed:`, delegateErr instanceof Error ? delegateErr.message : delegateErr);
+            if (proactiveNotifyFn) {
+              proactiveNotifyFn("Sorry, I couldn't delegate that task to a background worker. Please try again.", item.sourceChannel);
+            }
+          }
+        } else {
+          item.reject(err);
+        }
+      }
+      currentSourceChannel = undefined;
     }
-    currentSourceChannel = undefined;
+  } finally {
+    processing = false;
   }
-
-  processing = false;
 }
 
 function isRecoverableError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   return /timeout|disconnect|connection|EPIPE|ECONNRESET|ECONNREFUSED|socket|closed|ENOENT|spawn|not found|expired|stale/i.test(msg);
+}
+
+/** Auto-delegate a prompt to a background worker (used by watchdog and queue starvation). */
+async function autoDelegate(prompt: string, sourceChannel?: "telegram" | "tui"): Promise<void> {
+  // Check total active + pending slots to prevent over-spawning
+  if (workers.size + pendingWorkerSlots >= MAX_CONCURRENT_WORKERS) {
+    console.log(`[max] Worker limit reached (${workers.size} active + ${pendingWorkerSlots} pending) — queuing for later`);
+    workerOverflowQueue.push({ prompt, sourceChannel });
+    if (proactiveNotifyFn) {
+      proactiveNotifyFn(
+        `All ${MAX_CONCURRENT_WORKERS} workers are busy — your request is queued and will start when one finishes.`,
+        sourceChannel,
+      );
+    }
+    return;
+  }
+
+  // Reserve a slot synchronously before any async work to prevent race conditions
+  pendingWorkerSlots++;
+  const workerName = `auto-${++autoWorkerCounter}`;
+  const workingDir = process.cwd();
+
+  let session: CopilotSession;
+  try {
+    const client = await ensureClient();
+    session = await client.createSession({
+      model: config.copilotModel,
+      configDir: SESSIONS_DIR,
+      workingDirectory: workingDir,
+      onPermissionRequest: approveAll,
+    });
+  } catch (err) {
+    pendingWorkerSlots--;
+    throw err;
+  }
+  pendingWorkerSlots--;
+
+  const worker: WorkerInfo = {
+    name: workerName,
+    session,
+    workingDir,
+    status: "running",
+    startedAt: Date.now(),
+    originChannel: sourceChannel,
+  };
+  workers.set(workerName, worker);
+  console.log(`[max] Auto-delegated to worker '${workerName}' (${workers.size}/${MAX_CONCURRENT_WORKERS} workers active)`);
+
+  // Fire-and-forget: dispatch work, feed results back on completion
+  session.sendAndWait({ prompt }, WORKER_SEND_TIMEOUT_MS)
+    .then((result) => {
+      worker.lastOutput = result?.data?.content || "No response";
+      feedBackgroundResult(workerName, worker.lastOutput);
+    })
+    .catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      worker.lastOutput = `Auto-delegated task failed: ${msg}`;
+      feedBackgroundResult(workerName, worker.lastOutput);
+    })
+    .finally(() => {
+      session.destroy().catch(() => {});
+      workers.delete(workerName);
+      drainOverflowQueue();
+    });
+}
+
+/** Process the next item in the worker overflow queue (if any and a slot is free). */
+function drainOverflowQueue(): void {
+  while (workerOverflowQueue.length > 0 && workers.size + pendingWorkerSlots < MAX_CONCURRENT_WORKERS) {
+    const next = workerOverflowQueue.shift()!;
+    console.log(`[max] Overflow: starting queued auto-delegation (${workerOverflowQueue.length} remaining)`);
+    autoDelegate(next.prompt, next.sourceChannel).catch((err) => {
+      console.error(`[max] Overflow auto-delegate failed:`, err instanceof Error ? err.message : err);
+    });
+  }
 }
 
 export async function sendToOrchestrator(
@@ -373,12 +506,32 @@ export async function sendToOrchestrator(
     source.type === "telegram" ? "telegram" :
     source.type === "tui" ? "tui" : undefined;
 
+  // Queue starvation prevention: if the orchestrator is busy processing a message,
+  // immediately acknowledge and auto-delegate to a background worker so the user
+  // never waits more than a few seconds. Background sources skip this — they're
+  // already non-interactive.
+  if (processing && source.type !== "background") {
+    const ack = "Got it — I'm finishing something up. I'm handing this off to a background worker and will get back to you when it's done.";
+    callback(ack, true);
+    try { logMessage("out", sourceLabel, ack); } catch { /* best-effort */ }
+    try { logConversation(logRole, prompt, sourceLabel); } catch { /* best-effort */ }
+    try { logConversation("assistant", ack, sourceLabel); } catch { /* best-effort */ }
+    // Auto-delegate to a worker — results come back via proactiveNotify
+    autoDelegate(taggedPrompt, sourceChannel).catch((err) => {
+      console.error(`[max] Queue starvation auto-delegate failed:`, err instanceof Error ? err.message : err);
+      if (proactiveNotifyFn) {
+        proactiveNotifyFn("Sorry, I couldn't delegate that task to a background worker. Please try again.", sourceChannel);
+      }
+    });
+    return;
+  }
+
   // Enqueue and process
   void (async () => {
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         const finalContent = await new Promise<string>((resolve, reject) => {
-          messageQueue.push({ prompt: taggedPrompt, callback, sourceChannel, resolve, reject });
+          messageQueue.push({ prompt: taggedPrompt, callback, sourceChannel, resolve, reject, enqueuedAt: Date.now() });
           processQueue();
         });
         // Deliver response to user FIRST, then log best-effort

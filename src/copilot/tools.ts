@@ -10,6 +10,13 @@ import { SESSIONS_DIR } from "../paths.js";
 import { getCurrentSourceChannel } from "./orchestrator.js";
 import { getRouterConfig, updateRouterConfig } from "./router.js";
 
+const UNLIMITED_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24 hours — effectively unlimited
+
+/** Resolve the effective worker timeout (0 = unlimited → 24h). */
+function effectiveWorkerTimeout(): number {
+  return config.workerTimeoutMs === 0 ? UNLIMITED_TIMEOUT_MS : config.workerTimeoutMs;
+}
+
 function isTimeoutError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   return /timeout|timed?\s*out/i.test(msg);
@@ -112,7 +119,7 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
             `UPDATE worker_sessions SET status = 'running', updated_at = CURRENT_TIMESTAMP WHERE name = ?`
           ).run(args.name);
 
-          const timeoutMs = config.workerTimeoutMs;
+          const timeoutMs = effectiveWorkerTimeout();
           // Non-blocking: dispatch work and return immediately
           session.sendAndWait({
             prompt: `Working directory: ${args.working_dir}\n\n${args.initial_prompt}`,
@@ -161,7 +168,7 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
           args.name
         );
 
-        const timeoutMs = config.workerTimeoutMs;
+        const timeoutMs = effectiveWorkerTimeout();
         // Non-blocking: dispatch work and return immediately
         worker.session.sendAndWait({ prompt: args.prompt }, timeoutMs).then((result) => {
           worker.lastOutput = result?.data?.content || "No response";
