@@ -391,7 +391,7 @@ async function processQueue(): Promise<void> {
         // Watchdog fired — auto-delegate to a background worker
         if (err instanceof WatchdogTimeoutError) {
           console.log(`[max] Watchdog: auto-delegating to background worker`);
-          const ack = "This is taking a bit — I'm handing it off to a background worker. I'll get back to you when it's done.";
+          const ack = await generateHandoffAck(err.originalPrompt);
           // Resolve with ack — sendToOrchestrator will deliver it via callback
           item.resolve(ack);
           try {
@@ -430,6 +430,68 @@ function slugifyPrompt(prompt: string): string {
     .slice(0, 4)
     .join("-")
     || "task";
+}
+
+const ACK_MODEL = "gpt-4.1";
+const ACK_TIMEOUT_MS = 4_000;
+
+/**
+ * Ask a fast model to generate a brief, natural acknowledgment for a user prompt.
+ * Used by the watchdog and queue-starvation paths so the user gets a human-sounding
+ * response instead of a hardcoded "handing off to background worker" message.
+ * Falls back silently to a plain string if the entire operation exceeds ACK_TIMEOUT_MS
+ * or if any step errors — guaranteeing the ack path stays fast.
+ */
+async function generateHandoffAck(userPrompt: string): Promise<string> {
+  const fallback = "On it — I'll let you know when done.";
+
+  // Wrap everything (including ensureClient + createSession) in an outer race so
+  // a stalled client or slow session creation can't delay the user-facing ack.
+  const ackWork = (async () => {
+    const client = await ensureClient();
+    let ackSession: CopilotSession | undefined;
+    try {
+      ackSession = await client.createSession({
+        model: ACK_MODEL,
+        configDir: SESSIONS_DIR,
+        workingDirectory: process.cwd(),
+        onPermissionRequest: approveAll,
+        systemMessage: {
+          content:
+            "You generate brief, natural one-sentence acknowledgment messages for an AI assistant. " +
+            "Sound human and conversational — like texting a friend. " +
+            "NEVER mention 'background worker', 'delegating', 'thread', or any technical implementation details. " +
+            "Hint at what you're actually going to do based on the user's request. " +
+            "Keep it under 15 words. " +
+            "Examples: 'On it — I'll check your email and get back to you.' / " +
+            "'Sure thing — looking into that now.' / " +
+            "'Got it — I'll dig into the code and ping you when done.'",
+        },
+      });
+      const cleanPrompt = userPrompt
+        .replace(/^\s*(\[[^\]]*\]\s*)*/g, "") // strip [via tui] / [via telegram] tags
+        .trim()
+        .slice(0, 300);
+      const result = await ackSession.sendAndWait(
+        { prompt: `User request: "${cleanPrompt}"\n\nGenerate a brief acknowledgment.` },
+        ACK_TIMEOUT_MS,
+      );
+      return result?.data?.content?.trim() || fallback;
+    } finally {
+      // Always destroy — runs on success, error, and external timeout
+      ackSession?.destroy().catch(() => {});
+    }
+  })();
+
+  try {
+    return await Promise.race([
+      ackWork,
+      new Promise<string>((resolve) => setTimeout(() => resolve(fallback), ACK_TIMEOUT_MS)),
+    ]);
+  } catch (err) {
+    console.log(`[max] generateHandoffAck failed (using fallback):`, err instanceof Error ? err.message : err);
+    return fallback;
+  }
 }
 
 /** Auto-delegate a prompt to a background worker (used by watchdog and queue starvation). */
@@ -542,7 +604,7 @@ export async function sendToOrchestrator(
   // never waits more than a few seconds. Background sources skip this — they're
   // already non-interactive.
   if (processing && source.type !== "background") {
-    const ack = "Got it — I'm finishing something up. I'm handing this off to a background worker and will get back to you when it's done.";
+    const ack = await generateHandoffAck(prompt);
     callback(ack, true);
     try { logMessage("out", sourceLabel, ack); } catch { /* best-effort */ }
     try { logConversation(logRole, prompt, sourceLabel); } catch { /* best-effort */ }
