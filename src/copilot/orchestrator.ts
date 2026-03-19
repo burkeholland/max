@@ -576,6 +576,23 @@ function drainOverflowQueue(): void {
   }
 }
 
+/**
+ * Returns true for unambiguously social messages that don't need a background worker
+ * ("ty", "thanks", "lol", etc.). These are queued normally so the orchestrator handles
+ * them inline once it's free — spawning a worker for a thank-you is absurd overhead.
+ *
+ * Intentionally narrow: confirmation words ("yes", "no", "sure", "ok") are NOT included
+ * because they're often meaningful follow-ups ("yes, deploy it") that need context injection.
+ */
+function isTrivialMessage(prompt: string): boolean {
+  const clean = prompt
+    .replace(/^\s*(\[[^\]]*\]\s*)*/g, "") // strip [via tui] tags
+    .trim()
+    .toLowerCase();
+  if (clean.length > 60) return false;
+  return /^(ty|thx|thanks|thank you|np|no problem|cool|great|nice|lol|lmao|haha|ha|awesome|perfect|sweet|got it|sounds good)[\s!.?]*$/.test(clean);
+}
+
 export async function sendToOrchestrator(
   prompt: string,
   source: MessageSource,
@@ -602,8 +619,9 @@ export async function sendToOrchestrator(
   // Queue starvation prevention: if the orchestrator is busy processing a message,
   // immediately acknowledge and auto-delegate to a background worker so the user
   // never waits more than a few seconds. Background sources skip this — they're
-  // already non-interactive.
-  if (processing && source.type !== "background") {
+  // already non-interactive. Trivial social messages ("ty", "ok", etc.) also skip
+  // delegation and are queued normally — no point spawning a worker for a one-liner.
+  if (processing && source.type !== "background" && !isTrivialMessage(prompt)) {
     const ack = await generateHandoffAck(prompt);
     callback(ack, true);
     try { logMessage("out", sourceLabel, ack); } catch { /* best-effort */ }
