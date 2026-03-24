@@ -761,6 +761,27 @@ function cmdModel(arg: string): void {
   }
 }
 
+function cmdModels(): void {
+  apiGet("/models", (data: any) => {
+    if (data.error) {
+      console.log(C.red(`  Error: ${data.error}\n`));
+      return;
+    }
+    const models: string[] = data.models ?? [];
+    const current: string = data.current ?? "";
+    if (models.length === 0) {
+      console.log(C.dim("  No models available.\n"));
+      return;
+    }
+    console.log();
+    for (const id of models) {
+      const marker = id === current ? C.dim(" ← current") : "";
+      console.log(`  ${C.cyan(id)}${marker}`);
+    }
+    console.log();
+  });
+}
+
 function cmdMemory(): void {
   apiGet("/memory", (memories: any[]) => {
     if (!memories || memories.length === 0) {
@@ -775,7 +796,23 @@ function cmdMemory(): void {
   });
 }
 
-function cmdSkills(): void {
+function cmdSkills(arg?: string): void {
+  // Handle inline delete: /skills delete <slug>
+  if (arg) {
+    const parts = arg.split(/\s+/);
+    if ((parts[0] === "delete" || parts[0] === "rm") && parts[1]) {
+      const slug = parts[1];
+      apiDelete(`/skills/${encodeURIComponent(slug)}`, (data: any) => {
+        if (data.error) {
+          console.log(C.red(`  Error: ${data.error}\n`));
+        } else {
+          console.log(C.green(`  ✓ Removed '${slug}'\n`));
+        }
+      });
+      return;
+    }
+  }
+
   apiGet("/skills", (skills: any[]) => {
     if (!skills || skills.length === 0) {
       console.log(C.dim("  No skills installed.\n"));
@@ -795,7 +832,6 @@ function cmdSkills(): void {
       const src = s.source === "bundled" ? C.dim("bundled")
         : s.source === "local" ? C.green("local")
         : C.cyan("global");
-      const srcPad = s.source.padEnd(10);
       const desc = (s.description || "").slice(0, 40);
 
       if (s.source === "local") {
@@ -813,8 +849,8 @@ function cmdSkills(): void {
       return;
     }
 
-    console.log(C.dim(`  Type a number to uninstall a local skill, or press Enter to go back.`));
-    rl.question(`  ${C.coral("uninstall #")} `, (answer) => {
+    console.log(C.dim(`  Type a number to uninstall, a skill slug, or press Enter to go back.`));
+    rl.question(`  ${C.coral("delete #/slug")} `, (answer) => {
       const trimmed = answer.trim();
       if (!trimmed) {
         console.log();
@@ -822,10 +858,17 @@ function cmdSkills(): void {
         return;
       }
 
-      const num = /^\d+$/.test(trimmed) ? parseInt(trimmed, 10) : NaN;
-      const match = localSkills.find((s) => s.idx === num);
+      // Support entering a slug directly as well as a number
+      let match: { idx: number; slug: string } | undefined;
+      if (/^\d+$/.test(trimmed)) {
+        const num = parseInt(trimmed, 10);
+        match = localSkills.find((s) => s.idx === num);
+      } else {
+        match = localSkills.find((s) => s.slug === trimmed);
+      }
+
       if (!match) {
-        console.log(C.yellow(`  Invalid selection. Only local skills (highlighted) can be uninstalled.\n`));
+        console.log(C.yellow(`  Invalid selection. Only local skills (highlighted) can be deleted.\n`));
         rl.prompt();
         return;
       }
@@ -834,7 +877,7 @@ function cmdSkills(): void {
         if (data.error) {
           console.log(C.red(`  Error: ${data.error}\n`));
         } else {
-          console.log(C.green(`  ✓ Removed '${match.slug}'\n`));
+          console.log(C.green(`  ✓ Removed '${match!.slug}'\n`));
         }
       });
     });
@@ -859,9 +902,11 @@ function cmdHelp(): void {
   console.log(C.boldWhite("    COMMANDS"));
   console.log();
   console.log(`    ${C.coral("/model")} ${C.dim("[name]")}        show or switch model`);
+  console.log(`    ${C.coral("/models")}               list all available models`);
   console.log(`    ${C.coral("/auto")}                 toggle auto model routing`);
   console.log(`    ${C.coral("/memory")}               show stored memories`);
-  console.log(`    ${C.coral("/skills")}               list installed skills`);
+  console.log(`    ${C.coral("/skills")}               list installed skills`)
+  console.log(`    ${C.coral("/skills delete")} ${C.dim("<slug>")}  delete a skill by slug`);
   console.log(`    ${C.coral("/workers")}              list active sessions`);
   console.log(`    ${C.coral("/copy")}                 copy last response`);
   console.log(`    ${C.coral("/status")}               daemon health check`);
@@ -950,10 +995,11 @@ setTimeout(() => {
 
     if (trimmed === "/cancel") { sendCancel(); return; }
     if (trimmed === "/sessions" || trimmed === "/workers") { cmdWorkers(); return; }
+    if (trimmed === "/models") { cmdModels(); return; }
     if (trimmed.startsWith("/model")) { cmdModel(trimmed.slice(6).trim()); return; }
     if (trimmed === "/auto") { cmdAuto(); return; }
     if (trimmed === "/memory") { cmdMemory(); return; }
-    if (trimmed === "/skills") { cmdSkills(); return; }
+    if (trimmed.startsWith("/skills")) { cmdSkills(trimmed.slice(7).trim()); return; }
     if (trimmed === "/help") { cmdHelp(); return; }
 
     if (trimmed === "/status") {

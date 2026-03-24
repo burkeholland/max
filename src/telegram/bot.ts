@@ -18,10 +18,10 @@ export function createBot(): Bot {
   }
   bot = new Bot(config.telegramBotToken);
 
-  // Auth middleware — only allow the authorized user
+  // Auth middleware — only allow the authorized user; reject all messages if no user ID is configured
   bot.use(async (ctx, next) => {
-    if (config.authorizedUserId !== undefined && ctx.from?.id !== config.authorizedUserId) {
-      return; // Silently ignore unauthorized users
+    if (config.authorizedUserId === undefined || ctx.from?.id !== config.authorizedUserId) {
+      return; // Silently ignore unauthorized or unconfigured users
     }
     await next();
   });
@@ -36,6 +36,7 @@ export function createBot(): Bot {
         "/cancel — Cancel the current message\n" +
         "/model — Show current model\n" +
         "/model <name> — Switch model\n" +
+        "/models — List all available models\n" +
         "/auto — Toggle auto model routing\n" +
         "/memory — Show stored memories\n" +
         "/skills — List installed skills\n" +
@@ -74,6 +75,24 @@ export function createBot(): Bot {
       await ctx.reply(`Model: ${previous} → ${arg}`);
     } else {
       await ctx.reply(`Current model: ${config.copilotModel}`);
+    }
+  });
+  bot.command("models", async (ctx) => {
+    try {
+      const { getClient } = await import("../copilot/client.js");
+      const client = await getClient();
+      const models = await client.listModels();
+      if (models.length === 0) {
+        await ctx.reply("No models available.");
+        return;
+      }
+      const lines = models.map((m) =>
+        m.id === config.copilotModel ? `• ${m.id} ← current` : `• ${m.id}`
+      );
+      await ctx.reply(lines.join("\n"));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await ctx.reply(`Failed to list models: ${msg}`);
     }
   });
   bot.command("memory", async (ctx) => {

@@ -77,6 +77,7 @@ From Telegram or the TUI, just send natural language:
 | `/model [name]` | Show or switch the current model |
 | `/memory` | Show stored memories |
 | `/skills` | List installed skills |
+| `/skills delete <slug>` | Delete a local skill by slug |
 | `/workers` | List active worker sessions |
 | `/copy` | Copy last response to clipboard |
 | `/status` | Daemon health check |

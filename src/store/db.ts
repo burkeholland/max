@@ -145,8 +145,10 @@ export function searchMemories(
   const params: (string | number)[] = [];
 
   if (keyword) {
-    conditions.push(`content LIKE ?`);
-    params.push(`%${keyword}%`);
+    // Escape LIKE wildcards so the keyword is treated as a literal string
+    const escapedKeyword = keyword.replace(/[%_\\]/g, "\\$&");
+    conditions.push(`content LIKE ? ESCAPE '\\'`);
+    params.push(`%${escapedKeyword}%`);
   }
   if (category) {
     conditions.push(`category = ?`);
