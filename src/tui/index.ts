@@ -783,7 +783,7 @@ function cmdSkills(): void {
     }
 
     // Build table
-    const localSkills: { idx: number; slug: string }[] = [];
+    const deletableSkills: { idx: number; slug: string; source: "local" | "global" }[] = [];
     console.log();
     console.log(`  ${C.boldWhite("#")}   ${C.boldWhite("Skill")}${" ".repeat(24)}${C.boldWhite("Source")}      ${C.boldWhite("Description")}`);
     console.log(C.dim("  " + "─".repeat(72)));
@@ -795,11 +795,10 @@ function cmdSkills(): void {
       const src = s.source === "bundled" ? C.dim("bundled")
         : s.source === "local" ? C.green("local")
         : C.cyan("global");
-      const srcPad = s.source.padEnd(10);
       const desc = (s.description || "").slice(0, 40);
 
-      if (s.source === "local") {
-        localSkills.push({ idx: i + 1, slug: s.slug });
+      if (s.source === "local" || s.source === "global") {
+        deletableSkills.push({ idx: i + 1, slug: s.slug, source: s.source });
         console.log(`  ${C.cyan(num)}  ${name} ${src}${" ".repeat(Math.max(0, 10 - s.source.length))} ${C.dim(desc)}`);
       } else {
         console.log(`  ${C.dim(num)}  ${name} ${src}${" ".repeat(Math.max(0, 10 - s.source.length))} ${C.dim(desc)}`);
@@ -808,12 +807,12 @@ function cmdSkills(): void {
 
     console.log();
 
-    if (localSkills.length === 0) {
-      console.log(C.dim("  No local skills to uninstall.\n"));
+    if (deletableSkills.length === 0) {
+      console.log(C.dim("  No installed skills to uninstall.\n"));
       return;
     }
 
-    console.log(C.dim(`  Type a number to uninstall a local skill, or press Enter to go back.`));
+    console.log(C.dim(`  Type a number to uninstall a skill, or press Enter to go back.`));
     rl.question(`  ${C.coral("uninstall #")} `, (answer) => {
       const trimmed = answer.trim();
       if (!trimmed) {
@@ -823,14 +822,14 @@ function cmdSkills(): void {
       }
 
       const num = /^\d+$/.test(trimmed) ? parseInt(trimmed, 10) : NaN;
-      const match = localSkills.find((s) => s.idx === num);
+      const match = deletableSkills.find((s) => s.idx === num);
       if (!match) {
-        console.log(C.yellow(`  Invalid selection. Only local skills (highlighted) can be uninstalled.\n`));
+        console.log(C.yellow(`  Invalid selection. Only local and global skills (highlighted) can be uninstalled.\n`));
         rl.prompt();
         return;
       }
 
-      apiDelete(`/skills/${encodeURIComponent(match.slug)}`, (data: any) => {
+      apiDelete(`/skills/${encodeURIComponent(match.slug)}?source=${match.source}`, (data: any) => {
         if (data.error) {
           console.log(C.red(`  Error: ${data.error}\n`));
         } else {

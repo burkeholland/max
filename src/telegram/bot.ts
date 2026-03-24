@@ -18,10 +18,10 @@ export function createBot(): Bot {
   }
   bot = new Bot(config.telegramBotToken);
 
-  // Auth middleware — only allow the authorized user
+  // Auth middleware — only allow the authorized user; reject all messages if no user ID is configured
   bot.use(async (ctx, next) => {
-    if (config.authorizedUserId !== undefined && ctx.from?.id !== config.authorizedUserId) {
-      return; // Silently ignore unauthorized users
+    if (config.authorizedUserId === undefined || ctx.from?.id !== config.authorizedUserId) {
+      return; // Silently ignore unauthorized or unconfigured users
     }
     await next();
   });

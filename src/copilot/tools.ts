@@ -379,14 +379,15 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
 
     defineTool("uninstall_skill", {
       description:
-        "Remove a skill from Max's local skills directory (~/.max/skills/). " +
+        "Remove a skill from Max's local (~/.max/skills/) or global (~/.agents/skills/) skills directory. " +
         "The skill will no longer be available on the next message. " +
-        "Only works for local skills — bundled and global skills cannot be removed this way.",
+        "Bundled skills cannot be removed.",
       parameters: z.object({
         slug: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).describe("The kebab-case slug of the skill to remove, e.g. 'gmail', 'web-search'"),
+        source: z.enum(["local", "global"]).default("local").describe("Whether to remove from local (~/.max/skills/) or global (~/.agents/skills/) directory"),
       }),
       handler: async (args) => {
-        const result = removeSkill(args.slug);
+        const result = removeSkill(args.slug, args.source);
         return result.message;
       },
     }),

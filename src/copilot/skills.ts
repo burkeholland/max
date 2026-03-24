@@ -113,15 +113,16 @@ ${instructions}
   return `Skill '${name}' created at ${skillDir}. It will be available on your next message.`;
 }
 
-/** Remove a skill from the local skills directory (~/.max/skills/). */
-export function removeSkill(slug: string): { ok: boolean; message: string } {
-  const skillDir = join(LOCAL_SKILLS_DIR, slug);
+/** Remove a skill from the local or global skills directory. */
+export function removeSkill(slug: string, source: "local" | "global" = "local"): { ok: boolean; message: string } {
+  const baseDir = source === "global" ? GLOBAL_SKILLS_DIR : LOCAL_SKILLS_DIR;
+  const skillDir = join(baseDir, slug);
   // Guard against path traversal
-  if (!skillDir.startsWith(LOCAL_SKILLS_DIR + "/")) {
+  if (!skillDir.startsWith(baseDir + "/")) {
     return { ok: false, message: `Invalid slug '${slug}': must be a simple kebab-case name without path separators.` };
   }
   if (!existsSync(skillDir)) {
-    return { ok: false, message: `Skill '${slug}' not found in ${LOCAL_SKILLS_DIR}.` };
+    return { ok: false, message: `Skill '${slug}' not found in ${baseDir}.` };
   }
 
   rmSync(skillDir, { recursive: true, force: true });

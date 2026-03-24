@@ -31,7 +31,7 @@ app.use(express.json());
 
 // Bearer token authentication middleware (skip /status health check)
 app.use((req: Request, res: Response, next: NextFunction) => {
-  if (!apiToken || req.path === "/status" || req.path === "/send-photo") return next();
+  if (!apiToken || req.path === "/status") return next();
   const auth = req.headers.authorization;
   if (!auth || auth !== `Bearer ${apiToken}`) {
     res.status(401).json({ error: "Unauthorized" });
@@ -44,13 +44,12 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 const sseClients = new Map<string, Response>();
 let connectionCounter = 0;
 
-// Health check
+// Health check — intentionally unauthenticated, returns no sensitive data
 app.get("/status", (_req: Request, res: Response) => {
   res.json({
     status: "ok",
     workers: Array.from(getWorkers().values()).map((w) => ({
       name: w.name,
-      workingDir: w.workingDir,
       status: w.status,
     })),
   });
@@ -216,10 +215,11 @@ app.get("/skills", (_req: Request, res: Response) => {
   res.json(skills);
 });
 
-// Remove a local skill
+// Remove a local or global skill (?source=local|global, defaults to local)
 app.delete("/skills/:slug", (req: Request, res: Response) => {
   const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
-  const result = removeSkill(slug);
+  const source = req.query.source === "global" ? "global" : "local";
+  const result = removeSkill(slug, source);
   if (!result.ok) {
     res.status(400).json({ error: result.message });
   } else {
@@ -237,13 +237,25 @@ app.post("/restart", (_req: Request, res: Response) => {
   }, 500);
 });
 
-// Send a photo to Telegram (protected by bearer token auth middleware)
+// Send a photo to Telegram
 app.post("/send-photo", async (req: Request, res: Response) => {
   const { photo, caption } = req.body as { photo?: string; caption?: string };
 
   if (!photo || typeof photo !== "string") {
     res.status(400).json({ error: "Missing 'photo' (file path or URL) in request body" });
     return;
+  }
+
+  // Restrict local file paths to the system temp directory to prevent arbitrary file exfiltration
+  if (!photo.startsWith("http://") && !photo.startsWith("https://")) {
+    const { resolve } = await import("path");
+    const { tmpdir } = await import("os");
+    const resolvedPhoto = resolve(photo);
+    const allowedBase = resolve(tmpdir());
+    if (!resolvedPhoto.startsWith(allowedBase + "/") && resolvedPhoto !== allowedBase) {
+      res.status(403).json({ error: "Local file paths must be within the system temp directory. Use a URL or save the file to the temp dir first." });
+      return;
+    }
   }
 
   try {
