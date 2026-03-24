@@ -688,7 +688,7 @@ function apiPost(path: string, body: Record<string, unknown>, cb: (data: any) =>
 }
 
 /** DELETE an endpoint and call back with parsed result. */
-function apiDelete(path: string, cb: (data: any) => void): void {
+function apiDelete(path: string, cb: (data: any) => void, suppressPrompt = false): void {
   const url = new URL(path, API_BASE);
   const req = http.request(url, {
     method: "DELETE",
@@ -698,7 +698,7 @@ function apiDelete(path: string, cb: (data: any) => void): void {
     res.on("data", (chunk) => (data += chunk));
     res.on("end", () => {
       try { cb(JSON.parse(data)); } catch { console.log(data); }
-      rl.prompt();
+      if (!suppressPrompt) rl.prompt();
     });
   });
   req.on("error", (err) => {
@@ -795,7 +795,6 @@ function cmdSkills(): void {
       const src = s.source === "bundled" ? C.dim("bundled")
         : s.source === "local" ? C.green("local")
         : C.cyan("global");
-      const srcPad = s.source.padEnd(10);
       const desc = (s.description || "").slice(0, 40);
 
       if (s.source === "local") {
@@ -833,10 +832,12 @@ function cmdSkills(): void {
       apiDelete(`/skills/${encodeURIComponent(match.slug)}`, (data: any) => {
         if (data.error) {
           console.log(C.red(`  Error: ${data.error}\n`));
+          rl.prompt();
         } else {
           console.log(C.green(`  ✓ Removed '${match.slug}'\n`));
+          cmdSkills();
         }
-      });
+      }, true);
     });
   });
 }
