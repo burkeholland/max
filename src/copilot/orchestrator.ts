@@ -5,10 +5,11 @@ import { config, DEFAULT_MODEL } from "../config.js";
 import { loadMcpConfig } from "./mcp-config.js";
 import { getSkillDirectories } from "./skills.js";
 import { resetClient } from "./client.js";
-import { logConversation, getState, setState, deleteState, getMemorySummary, getRecentConversation, getRelevantMemories, runMemoryMaintenance } from "../store/db.js";
+import { logConversation, getState, setState, deleteState, getMemorySummary, getRecentConversation, getRelevantMemories, runMemoryMaintenance, getRecentSummaries, getConversationSince, getTopMemories } from "../store/db.js";
 import { SESSIONS_DIR } from "../paths.js";
 import { resolveModel, type Tier, type RouteResult } from "./router.js";
 import { extractAndSaveMemories } from "./memory-extractor.js";
+import { extractMemoriesWithLLM, generateConversationSummary } from "./memory-llm.js";
 
 const MAX_RETRIES = 3;
 const RECONNECT_DELAYS_MS = [1_000, 3_000, 10_000];
@@ -69,6 +70,10 @@ let processing = false;
 let currentCallback: MessageCallback | undefined;
 /** The channel currently being processed — tools use this to tag new workers. */
 let currentSourceChannel: "telegram" | "tui" | undefined;
+
+// Memory extraction state
+let turnsSinceLastSummary = 0;
+let lastSummaryId: number | undefined;
 
 /** Get the channel that originated the message currently being processed. */
 export function getCurrentSourceChannel(): "telegram" | "tui" | undefined {
@@ -219,17 +224,28 @@ async function createOrResumeSession(): Promise<CopilotSession> {
   console.log(`[max] Created orchestrator session ${session.sessionId.slice(0, 8)}…`);
 
   // Recover conversation context if available (session was lost, not first run)
-  const recentHistory = getRecentConversation(30);
+  const summaries = getRecentSummaries(5);
+  const recentHistory = summaries.length > 0 ? "" : getRecentConversation(30);
   const recoveryMemorySummary = getMemorySummary();
-  if (recentHistory || recoveryMemorySummary) {
-    console.log(`[max] Injecting recovery context into new session (${recentHistory ? "conversation + " : ""}${recoveryMemorySummary ? "memories" : ""})`);
+  const topMemories = getTopMemories(15, 3);
+  if (summaries.length > 0 || recentHistory || recoveryMemorySummary) {
+    const hasSummaries = summaries.length > 0;
+    console.log(`[max] Injecting recovery context into new session (${hasSummaries ? "summaries" : "conversation"} + ${recoveryMemorySummary ? "memories" : "no memories"})`);
     const parts: string[] = [
       "[System: Session recovered] Your previous session was lost. Absorb this context silently — do NOT respond to it.",
     ];
     if (recoveryMemorySummary) {
       parts.push(`\n## Your Long-Term Memories:\n${recoveryMemorySummary}`);
     }
-    if (recentHistory) {
+    if (topMemories.length > 0) {
+      const critical = topMemories.filter((m) => m.importance >= 4);
+      if (critical.length > 0) {
+        parts.push(`\n## Key Facts (high importance):\n${critical.map((m) => `- ${m.content}`).join("\n")}`);
+      }
+    }
+    if (hasSummaries) {
+      parts.push(`\n## Recent Conversation Summaries:\n${summaries.map((s) => `[${s.created_at}] ${s.summary}`).join("\n\n")}`);
+    } else if (recentHistory) {
       parts.push(`\n## Recent Conversation (last 30 turns):\n${recentHistory}`);
     }
     parts.push("\n(End of recovery context. Wait for the next real message.)");
@@ -293,11 +309,11 @@ async function executeOnSession(prompt: string, callback: MessageCallback): Prom
   let enrichedPrompt = prompt;
   if (!prompt.startsWith("[Background task completed]")) {
     try {
-      const relevant = getRelevantMemories(prompt, 5);
+      const relevant = getRelevantMemories(prompt, 10);
       if (relevant.length > 0) {
         const memBlock = relevant.join("; ");
-        // Cap at 500 chars to avoid prompt bloat
-        const trimmed = memBlock.length > 500 ? memBlock.slice(0, 500) + "…" : memBlock;
+        // Cap at 2000 chars for richer context
+        const trimmed = memBlock.length > 2000 ? memBlock.slice(0, 2000) + "…" : memBlock;
         enrichedPrompt = `[Memory context: ${trimmed}]\n\n${prompt}`;
       }
     } catch { /* non-fatal */ }
@@ -433,7 +449,28 @@ export async function sendToOrchestrator(
         try { logConversation("assistant", finalContent, sourceLabel); } catch { /* best-effort */ }
         // Silently extract memorable facts from user messages
         if (logRole === "user") {
+          // Fast regex extraction (synchronous fallback)
           try { extractAndSaveMemories(prompt); } catch { /* best-effort */ }
+          // Async LLM extraction — fire-and-forget, never blocks next message
+          if (copilotClient) {
+            void extractMemoriesWithLLM(copilotClient, prompt, finalContent).then((count) => {
+              if (count > 0) console.log(`[max] LLM extracted ${count} memor${count === 1 ? "y" : "ies"}`);
+            }).catch(() => {});
+          }
+          // Track turns for conversation summary generation
+          turnsSinceLastSummary++;
+          if (turnsSinceLastSummary >= 10 && copilotClient) {
+            const turns = getConversationSince(lastSummaryId, 20);
+            if (turns.length >= 4) {
+              turnsSinceLastSummary = 0;
+              void generateConversationSummary(copilotClient, turns).then((summary) => {
+                if (summary) {
+                  lastSummaryId = turns[turns.length - 1]?.id;
+                  console.log(`[max] Generated conversation summary (${turns.length} turns)`);
+                }
+              }).catch(() => {});
+            }
+          }
         }
         return;
       } catch (err) {

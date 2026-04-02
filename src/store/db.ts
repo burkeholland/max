@@ -1,6 +1,8 @@
 import Database from "better-sqlite3";
 import { DB_PATH, ensureMaxHome } from "../paths.js";
 
+export type MemoryCategory = "preference" | "fact" | "project" | "person" | "routine" | "task" | "decision" | "context";
+
 let db: Database.Database | undefined;
 let logInsertCount = 0;
 let fts5Available = false;
@@ -40,11 +42,63 @@ export function getDb(): Database.Database {
     db.exec(`
       CREATE TABLE IF NOT EXISTS memories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        category TEXT NOT NULL CHECK(category IN ('preference', 'fact', 'project', 'person', 'routine')),
+        category TEXT NOT NULL CHECK(category IN ('preference', 'fact', 'project', 'person', 'routine', 'task', 'decision', 'context')),
         content TEXT NOT NULL,
         source TEXT NOT NULL DEFAULT 'user',
+        importance INTEGER NOT NULL DEFAULT 3,
+        context TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        last_accessed DATETIME DEFAULT CURRENT_TIMESTAMP
+        last_accessed DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    // Migrate memories: expand CHECK constraint and add new columns
+    try {
+      db.prepare(`INSERT INTO memories (category, content, source) VALUES ('task', '__migration_test__', 'user')`).run();
+      db.prepare(`DELETE FROM memories WHERE content = '__migration_test__'`).run();
+      // CHECK is good — ensure new columns exist (safe if already present)
+      for (const col of [
+        `ALTER TABLE memories ADD COLUMN importance INTEGER NOT NULL DEFAULT 3`,
+        `ALTER TABLE memories ADD COLUMN context TEXT`,
+        `ALTER TABLE memories ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP`,
+      ]) {
+        try { db.exec(col); } catch { /* column already exists */ }
+      }
+    } catch {
+      // CHECK constraint doesn't allow new categories — recreate table in a transaction
+      db.exec(`BEGIN`);
+      try {
+        db.exec(`ALTER TABLE memories RENAME TO memories_old`);
+        db.exec(`
+          CREATE TABLE memories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT NOT NULL CHECK(category IN ('preference', 'fact', 'project', 'person', 'routine', 'task', 'decision', 'context')),
+            content TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'user',
+            importance INTEGER NOT NULL DEFAULT 3,
+            context TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_accessed DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        db.exec(`INSERT INTO memories (id, category, content, source, created_at, last_accessed) SELECT id, category, content, source, created_at, last_accessed FROM memories_old`);
+        db.exec(`DROP TABLE memories_old`);
+        db.exec(`COMMIT`);
+      } catch (migErr) {
+        db.exec(`ROLLBACK`);
+        throw migErr;
+      }
+    }
+    // Conversation summaries — rolling segment summaries that survive session restarts
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS conversation_summaries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        summary TEXT NOT NULL,
+        turn_count INTEGER NOT NULL,
+        first_turn_ts DATETIME,
+        last_turn_ts DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
     // Migrate: if the table already existed with a stricter CHECK, recreate it
@@ -161,14 +215,16 @@ export function getRecentConversation(limit = 20): string {
 
 /** Add a memory to long-term storage. */
 export function addMemory(
-  category: "preference" | "fact" | "project" | "person" | "routine",
+  category: MemoryCategory,
   content: string,
-  source: "user" | "auto" = "user"
+  source: "user" | "auto" = "user",
+  importance = 3,
+  context?: string
 ): number {
   const db = getDb();
   const result = db.prepare(
-    `INSERT INTO memories (category, content, source) VALUES (?, ?, ?)`
-  ).run(category, content, source);
+    `INSERT INTO memories (category, content, source, importance, context) VALUES (?, ?, ?, ?, ?)`
+  ).run(category, content, source, Math.max(1, Math.min(5, importance)), context ?? null);
   return result.lastInsertRowid as number;
 }
 
@@ -248,20 +304,23 @@ export function removeMemory(id: number): boolean {
 export function getMemorySummary(): string {
   const db = getDb();
   const rows = db.prepare(
-    `SELECT id, category, content FROM memories ORDER BY category, last_accessed DESC`
-  ).all() as { id: number; category: string; content: string }[];
+    `SELECT id, category, content, importance FROM memories ORDER BY category, importance DESC, last_accessed DESC`
+  ).all() as { id: number; category: string; content: string; importance: number }[];
 
   if (rows.length === 0) return "";
 
   // Group by category
-  const grouped: Record<string, { id: number; content: string }[]> = {};
+  const grouped: Record<string, { id: number; content: string; importance: number }[]> = {};
   for (const r of rows) {
     if (!grouped[r.category]) grouped[r.category] = [];
-    grouped[r.category].push({ id: r.id, content: r.content });
+    grouped[r.category].push({ id: r.id, content: r.content, importance: r.importance });
   }
 
   const sections = Object.entries(grouped).map(([cat, items]) => {
-    const lines = items.map((i) => `  - [#${i.id}] ${i.content}`).join("\n");
+    const lines = items.map((i) => {
+      const stars = i.importance >= 4 ? " ★" : "";
+      return `  - [#${i.id}] ${i.content}${stars}`;
+    }).join("\n");
     return `**${cat}**:\n${lines}`;
   });
 
@@ -292,7 +351,7 @@ export function findSimilarMemory(content: string): boolean {
 }
 
 /** Search memories for content relevant to a query. Uses FTS5 when available, falls back to word overlap. */
-export function getRelevantMemories(query: string, limit = 5): string[] {
+export function getRelevantMemories(query: string, limit = 10): string[] {
   const db = getDb();
 
   // Strip channel tags for cleaner matching
@@ -301,62 +360,78 @@ export function getRelevantMemories(query: string, limit = 5): string[] {
     cleanQuery.toLowerCase().split(/\s+/).filter((w) => w.length > 3)
   );
 
+  // Always include high-importance memories (★ importance >= 5)
+  const critical = db.prepare(
+    `SELECT id, content FROM memories WHERE importance >= 5 ORDER BY last_accessed DESC LIMIT 5`
+  ).all() as { id: number; content: string }[];
+  const criticalContents = critical.map((r) => r.content);
+  const criticalIds = new Set(critical.map((r) => r.id));
+  const remaining = Math.max(0, limit - criticalContents.length);
+
   if (queryWords.size === 0) {
     const rows = db.prepare(
-      `SELECT content FROM memories ORDER BY last_accessed DESC LIMIT ?`
-    ).all(Math.min(limit, 3)) as { content: string }[];
+      `SELECT content FROM memories ORDER BY importance DESC, last_accessed DESC LIMIT ?`
+    ).all(Math.min(limit, 5)) as { content: string }[];
     return rows.map((r) => r.content);
   }
 
   // Try FTS5 first
-  if (fts5Available) {
+  if (fts5Available && remaining > 0) {
     try {
       const ftsQuery = [...queryWords].map((w) => `"${w.replace(/"/g, '""')}"`).join(" OR ");
       const rows = db.prepare(`
-        SELECT m.id, m.content
+        SELECT m.id, m.content, m.importance
         FROM memories_fts f
         JOIN memories m ON m.id = f.rowid
         WHERE memories_fts MATCH ?
-        ORDER BY bm25(memories_fts) LIMIT ?
-      `).all(ftsQuery, limit) as { id: number; content: string }[];
+        ORDER BY m.importance DESC, bm25(memories_fts) LIMIT ?
+      `).all(ftsQuery, remaining + 5) as { id: number; content: string; importance: number }[];
 
-      if (rows.length > 0) {
-        const placeholders = rows.map(() => "?").join(",");
-        db.prepare(`UPDATE memories SET last_accessed = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`).run(...rows.map((r) => r.id));
-        return rows.map((r) => r.content);
+      const filtered = rows.filter((r) => !criticalIds.has(r.id)).slice(0, remaining);
+      if (filtered.length > 0) {
+        const allIds = [...critical, ...filtered].map((r) => r.id);
+        const placeholders = allIds.map(() => "?").join(",");
+        db.prepare(`UPDATE memories SET last_accessed = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`).run(...allIds);
+        return [...criticalContents, ...filtered.map((r) => r.content)];
       }
     } catch { /* fall through to word overlap */ }
   }
 
-  // Word overlap fallback
+  // Word overlap fallback with importance weighting
   const rows = db.prepare(
-    `SELECT id, content FROM memories ORDER BY last_accessed DESC`
-  ).all() as { id: number; content: string }[];
+    `SELECT id, content, importance FROM memories ORDER BY last_accessed DESC`
+  ).all() as { id: number; content: string; importance: number }[];
 
-  const scored = rows.map((row) => {
-    const memWords = row.content.toLowerCase().split(/\s+/);
-    let hits = 0;
-    for (const w of memWords) {
-      if (queryWords.has(w)) hits++;
-    }
-    return { ...row, hits };
-  }).filter((r) => r.hits >= 2)
-    .sort((a, b) => b.hits - a.hits)
-    .slice(0, limit);
+  const scored = rows
+    .filter((r) => !criticalIds.has(r.id))
+    .map((row) => {
+      const memWords = row.content.toLowerCase().split(/\s+/);
+      let hits = 0;
+      for (const w of memWords) {
+        if (queryWords.has(w)) hits++;
+      }
+      // Weight by importance: importance 5 = 2x boost, importance 1 = 0.5x
+      const importanceWeight = 0.5 + (row.importance / 5);
+      return { ...row, score: hits * importanceWeight };
+    })
+    .filter((r) => r.score >= 1.5)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, remaining);
 
-  if (scored.length === 0) {
+  if (scored.length === 0 && criticalContents.length === 0) {
     const recent = db.prepare(
-      `SELECT content FROM memories ORDER BY last_accessed DESC LIMIT ?`
-    ).all(Math.min(limit, 3)) as { content: string }[];
+      `SELECT content FROM memories ORDER BY importance DESC, last_accessed DESC LIMIT ?`
+    ).all(Math.min(limit, 5)) as { content: string }[];
     return recent.map((r) => r.content);
   }
 
-  if (scored.length > 0) {
-    const placeholders = scored.map(() => "?").join(",");
-    db.prepare(`UPDATE memories SET last_accessed = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`).run(...scored.map((r) => r.id));
+  const allIds = [...critical, ...scored].map((r) => r.id);
+  if (allIds.length > 0) {
+    const placeholders = allIds.map(() => "?").join(",");
+    db.prepare(`UPDATE memories SET last_accessed = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`).run(...allIds);
   }
 
-  return scored.map((r) => r.content);
+  return [...criticalContents, ...scored.map((r) => r.content)];
 }
 
 const AUTO_MEMORY_CAP = 500;
@@ -426,6 +501,77 @@ export function capAutoMemories(maxCount = AUTO_MEMORY_CAP): number {
     )`
   ).run(excess);
   return result.changes;
+}
+
+/** Update an existing memory's content, importance, or context. */
+export function updateMemory(id: number, updates: { content?: string; importance?: number; context?: string }): boolean {
+  const db = getDb();
+  const sets: string[] = [];
+  const params: (string | number)[] = [];
+
+  if (updates.content !== undefined) {
+    sets.push(`content = ?`);
+    params.push(updates.content);
+  }
+  if (updates.importance !== undefined) {
+    sets.push(`importance = ?`);
+    params.push(Math.max(1, Math.min(5, updates.importance)));
+  }
+  if (updates.context !== undefined) {
+    sets.push(`context = ?`);
+    params.push(updates.context);
+  }
+
+  if (sets.length === 0) return false;
+  sets.push(`updated_at = CURRENT_TIMESTAMP`);
+  params.push(id);
+
+  const result = db.prepare(`UPDATE memories SET ${sets.join(", ")} WHERE id = ?`).run(...params);
+  return result.changes > 0;
+}
+
+/** Get top memories by importance, optionally filtered by minimum importance. */
+export function getTopMemories(limit = 20, minImportance = 1): { id: number; category: string; content: string; importance: number }[] {
+  const db = getDb();
+  return db.prepare(
+    `SELECT id, category, content, importance FROM memories WHERE importance >= ? ORDER BY importance DESC, last_accessed DESC LIMIT ?`
+  ).all(minImportance, limit) as { id: number; category: string; content: string; importance: number }[];
+}
+
+/** Store a conversation summary. */
+export function addSummary(summary: string, turnCount: number, firstTurnTs?: string, lastTurnTs?: string): number {
+  const db = getDb();
+  const result = db.prepare(
+    `INSERT INTO conversation_summaries (summary, turn_count, first_turn_ts, last_turn_ts) VALUES (?, ?, ?, ?)`
+  ).run(summary, turnCount, firstTurnTs ?? null, lastTurnTs ?? null);
+  // Keep at most 50 summaries
+  db.prepare(`DELETE FROM conversation_summaries WHERE id NOT IN (SELECT id FROM conversation_summaries ORDER BY id DESC LIMIT 50)`).run();
+  return result.lastInsertRowid as number;
+}
+
+/** Get recent conversation summaries for session recovery. */
+export function getRecentSummaries(limit = 5): { id: number; summary: string; turn_count: number; created_at: string }[] {
+  const db = getDb();
+  const rows = db.prepare(
+    `SELECT id, summary, turn_count, created_at FROM conversation_summaries ORDER BY id DESC LIMIT ?`
+  ).all(limit) as { id: number; summary: string; turn_count: number; created_at: string }[];
+  rows.reverse(); // chronological order
+  return rows;
+}
+
+/** Get conversation turns since a given log ID for summarization. Uses monotonic id to avoid timestamp-precision skips. */
+export function getConversationSince(sinceId?: number, limit = 30): { id: number; role: string; content: string; source: string; ts: string }[] {
+  const db = getDb();
+  if (sinceId) {
+    return db.prepare(
+      `SELECT id, role, content, source, ts FROM conversation_log WHERE id > ? ORDER BY id ASC LIMIT ?`
+    ).all(sinceId, limit) as { id: number; role: string; content: string; source: string; ts: string }[];
+  }
+  const rows = db.prepare(
+    `SELECT id, role, content, source, ts FROM conversation_log ORDER BY id DESC LIMIT ?`
+  ).all(limit) as { id: number; role: string; content: string; source: string; ts: string }[];
+  rows.reverse();
+  return rows;
 }
 
 /** Run all memory maintenance tasks. Returns summary of actions taken. */
