@@ -31,7 +31,7 @@ app.use(express.json());
 
 // Bearer token authentication middleware (skip /status health check)
 app.use((req: Request, res: Response, next: NextFunction) => {
-  if (!apiToken || req.path === "/status" || req.path === "/send-photo") return next();
+  if (!apiToken || req.path === "/status") return next();
   const auth = req.headers.authorization;
   if (!auth || auth !== `Bearer ${apiToken}`) {
     res.status(401).json({ error: "Unauthorized" });
@@ -44,13 +44,12 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 const sseClients = new Map<string, Response>();
 let connectionCounter = 0;
 
-// Health check
+// Health check — intentionally unauthenticated, returns no sensitive data
 app.get("/status", (_req: Request, res: Response) => {
   res.json({
     status: "ok",
     workers: Array.from(getWorkers().values()).map((w) => ({
       name: w.name,
-      workingDir: w.workingDir,
       status: w.status,
     })),
   });
@@ -179,6 +178,19 @@ app.post("/model", async (req: Request, res: Response) => {
   res.json({ previous, current: model });
 });
 
+// List all available models
+app.get("/models", async (_req: Request, res: Response) => {
+  try {
+    const { getClient } = await import("../copilot/client.js");
+    const client = await getClient();
+    const models = await client.listModels();
+    res.json({ models: models.map((m) => m.id), current: config.copilotModel });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: `Failed to list models: ${msg}` });
+  }
+});
+
 // Get auto-routing config
 app.get("/auto", (_req: Request, res: Response) => {
   const routerConfig = getRouterConfig();
@@ -237,13 +249,25 @@ app.post("/restart", (_req: Request, res: Response) => {
   }, 500);
 });
 
-// Send a photo to Telegram (protected by bearer token auth middleware)
+// Send a photo to Telegram
 app.post("/send-photo", async (req: Request, res: Response) => {
   const { photo, caption } = req.body as { photo?: string; caption?: string };
 
   if (!photo || typeof photo !== "string") {
     res.status(400).json({ error: "Missing 'photo' (file path or URL) in request body" });
     return;
+  }
+
+  // Restrict local file paths to the system temp directory to prevent arbitrary file exfiltration
+  if (!photo.startsWith("http://") && !photo.startsWith("https://")) {
+    const { resolve } = await import("path");
+    const { tmpdir } = await import("os");
+    const resolvedPhoto = resolve(photo);
+    const allowedBase = resolve(tmpdir());
+    if (!resolvedPhoto.startsWith(allowedBase + "/") && resolvedPhoto !== allowedBase) {
+      res.status(403).json({ error: "Local file paths must be within the system temp directory. Use a URL or save the file to the temp dir first." });
+      return;
+    }
   }
 
   try {

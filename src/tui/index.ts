@@ -761,6 +761,27 @@ function cmdModel(arg: string): void {
   }
 }
 
+function cmdModels(): void {
+  apiGet("/models", (data: any) => {
+    if (data.error) {
+      console.log(C.red(`  Error: ${data.error}\n`));
+      return;
+    }
+    const models: string[] = data.models ?? [];
+    const current: string = data.current ?? "";
+    if (models.length === 0) {
+      console.log(C.dim("  No models available.\n"));
+      return;
+    }
+    console.log();
+    for (const id of models) {
+      const marker = id === current ? C.dim(" ← current") : "";
+      console.log(`  ${C.cyan(id)}${marker}`);
+    }
+    console.log();
+  });
+}
+
 function cmdMemory(): void {
   apiGet("/memory", (memories: any[]) => {
     if (!memories || memories.length === 0) {
@@ -859,6 +880,7 @@ function cmdHelp(): void {
   console.log(C.boldWhite("    COMMANDS"));
   console.log();
   console.log(`    ${C.coral("/model")} ${C.dim("[name]")}        show or switch model`);
+  console.log(`    ${C.coral("/models")}               list all available models`);
   console.log(`    ${C.coral("/auto")}                 toggle auto model routing`);
   console.log(`    ${C.coral("/memory")}               show stored memories`);
   console.log(`    ${C.coral("/skills")}               list installed skills`);
@@ -950,6 +972,7 @@ setTimeout(() => {
 
     if (trimmed === "/cancel") { sendCancel(); return; }
     if (trimmed === "/sessions" || trimmed === "/workers") { cmdWorkers(); return; }
+    if (trimmed === "/models") { cmdModels(); return; }
     if (trimmed.startsWith("/model")) { cmdModel(trimmed.slice(6).trim()); return; }
     if (trimmed === "/auto") { cmdAuto(); return; }
     if (trimmed === "/memory") { cmdMemory(); return; }

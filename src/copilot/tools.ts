@@ -7,7 +7,7 @@ import { homedir } from "os";
 import { listSkills, createSkill, removeSkill } from "./skills.js";
 import { config, persistModel } from "../config.js";
 import { SESSIONS_DIR } from "../paths.js";
-import { getCurrentSourceChannel } from "./orchestrator.js";
+import { getCurrentSourceChannel, switchSessionModel } from "./orchestrator.js";
 import { getRouterConfig, updateRouterConfig } from "./router.js";
 
 function isTimeoutError(err: unknown): boolean {
@@ -442,13 +442,20 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
           config.copilotModel = args.model_id;
           persistModel(args.model_id);
 
+          // Apply model change to the live session immediately
+          try {
+            await switchSessionModel(args.model_id);
+          } catch (err) {
+            console.log(`[max] setModel() failed during switch_model (will apply on next session): ${err instanceof Error ? err.message : err}`);
+          }
+
           // Disable router when manually switching — user has explicit preference
           if (getRouterConfig().enabled) {
             updateRouterConfig({ enabled: false });
-            return `Switched model from '${previous}' to '${args.model_id}'. Auto-routing disabled (use /auto or toggle_auto to re-enable). Takes effect on next message.`;
+            return `Switched model from '${previous}' to '${args.model_id}'. Auto-routing disabled (use /auto or toggle_auto to re-enable).`;
           }
 
-          return `Switched model from '${previous}' to '${args.model_id}'. Takes effect on next message.`;
+          return `Switched model from '${previous}' to '${args.model_id}'.`;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           return `Failed to switch model: ${msg}`;

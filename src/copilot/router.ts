@@ -137,7 +137,7 @@ async function classifyMessage(
   // Short follow-ups inherit the previous tier
   if (text.length < 20 && recentTiers.length > 0) {
     const isFollowUp = FOLLOW_UP_PATTERNS.some((p) => lower === p || lower === p + ".");
-    if (isFollowUp) return recentTiers[0];
+    if (isFollowUp) return recentTiers[recentTiers.length - 1];
   }
 
   // LLM classification

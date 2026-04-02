@@ -1,0 +1,1408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pitch Boss — Soccer Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@700;800&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════
+   DESIGN SYSTEM — PostrBoard-inspired
+   Light, airy, glass morphism, coral/azure/sage
+   ═══════════════════════════════════════════ */
+:root {
+  --bg-gradient: linear-gradient(165deg, #ffffff 0%, #f0f9ff 40%, #f0fdf4 100%);
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --text-tertiary: #9ca3af;
+  --accent-gradient: linear-gradient(135deg, #ff7f50, #0ea5e9, #84cc16);
+  --accent-coral: #ff7f50;
+  --accent-azure: #0ea5e9;
+  --accent-sage: #84cc16;
+  --card-bg: rgba(255, 255, 255, 0.65);
+  --card-bg-solid: rgba(255, 255, 255, 0.85);
+  --card-border: rgba(255, 255, 255, 0.6);
+  --card-border-subtle: rgba(0, 0, 0, 0.06);
+  --glass-shadow: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05);
+  --glass-shadow-lg: 0 10px 25px -5px rgba(0,0,0,0.08), 0 8px 10px -6px rgba(0,0,0,0.04);
+  --glass-shadow-xl: 0 20px 50px -12px rgba(0,0,0,0.12);
+  --win: #16a34a;
+  --draw: #d97706;
+  --loss: #dc2626;
+  --font-display: 'Outfit', sans-serif;
+  --font-body: 'Plus Jakarta Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --radius: 20px;
+  --radius-sm: 12px;
+  --radius-pill: 9999px;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 16px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg-gradient);
+  background-attachment: fixed;
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+  line-height: 1.6;
+}
+
+/* ═══════════════════════════════════════════
+   SUBTLE GRAIN TEXTURE
+   ═══════════════════════════════════════════ */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ═══════════════════════════════════════════
+   SCREEN MANAGEMENT
+   ═══════════════════════════════════════════ */
+.screen { display: none; min-height: 100vh; }
+.screen.active { display: flex; flex-direction: column; }
+
+/* ═══════════════════════════════════════════
+   SHARED COMPONENTS
+   ═══════════════════════════════════════════ */
+.gradient-text {
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.glass {
+  background: var(--card-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  box-shadow: var(--glass-shadow);
+  transition: transform 0.25s var(--ease), box-shadow 0.25s var(--ease);
+}
+.glass:hover {
+  box-shadow: var(--glass-shadow-lg);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0.8rem 2rem;
+  border: none;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+  text-decoration: none;
+}
+.btn:active { transform: scale(0.97); }
+
+.btn-primary {
+  background: var(--accent-gradient);
+  color: white;
+  box-shadow: 0 4px 14px rgba(14, 165, 233, 0.25);
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(14, 165, 233, 0.35);
+}
+
+.btn-lg {
+  padding: 1rem 2.5rem;
+  font-size: 1.05rem;
+}
+
+.tag {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.2rem 0.65rem;
+  background: rgba(0,0,0,0.04);
+  border: 1px solid rgba(0,0,0,0.05);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+/* ═══════════════════════════════════════════
+   ANIMATIONS
+   ═══════════════════════════════════════════ */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.8); }
+  60% { transform: scale(1.05); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.anim-up { animation: fadeUp 0.7s var(--ease) both; }
+.anim-up-d1 { animation: fadeUp 0.7s var(--ease) 0.08s both; }
+.anim-up-d2 { animation: fadeUp 0.7s var(--ease) 0.16s both; }
+.anim-up-d3 { animation: fadeUp 0.7s var(--ease) 0.24s both; }
+.anim-up-d4 { animation: fadeUp 0.7s var(--ease) 0.32s both; }
+.anim-up-d5 { animation: fadeUp 0.7s var(--ease) 0.40s both; }
+.anim-scale { animation: scaleIn 0.6s var(--ease) 0.3s both; }
+
+/* ═══════════════════════════════════════════
+   TITLE SCREEN
+   ═══════════════════════════════════════════ */
+#title-screen {
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.title-content {
+  text-align: center;
+  padding: 2rem;
+}
+
+.title-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.35rem 1rem;
+  background: rgba(14, 165, 233, 0.08);
+  border: 1px solid rgba(14, 165, 233, 0.12);
+  border-radius: var(--radius-pill);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent-azure);
+  margin-bottom: 2.5rem;
+  animation: slideDown 0.6s var(--ease) both;
+}
+
+.title-heading {
+  font-family: var(--font-display);
+  font-size: clamp(4rem, 11vw, 8rem);
+  font-weight: 900;
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+  margin-bottom: 0.4rem;
+  animation: fadeUp 0.8s var(--ease) 0.1s both;
+}
+
+.title-sub {
+  font-family: var(--font-display);
+  font-size: clamp(1rem, 2.5vw, 1.35rem);
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 3rem;
+  animation: fadeUp 0.8s var(--ease) 0.2s both;
+}
+
+.title-actions {
+  animation: fadeUp 0.8s var(--ease) 0.35s both;
+}
+
+.title-footer {
+  position: absolute;
+  bottom: 2.5rem;
+  display: flex;
+  gap: 1.5rem;
+  animation: fadeIn 1s var(--ease) 0.6s both;
+}
+.title-footer .tag {
+  background: rgba(0,0,0,0.03);
+}
+
+/* ═══════════════════════════════════════════
+   TEAM SELECT SCREEN
+   ═══════════════════════════════════════════ */
+#select-screen {
+  padding: 3rem 0 5rem;
+  align-items: center;
+}
+
+.select-header {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+.select-header h1 {
+  font-family: var(--font-display);
+  font-size: clamp(2.2rem, 5vw, 3.2rem);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.5rem;
+}
+.select-header p {
+  color: var(--text-secondary);
+  font-size: 1.05rem;
+}
+
+.divisions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.5rem;
+  max-width: 1100px;
+  width: 100%;
+  padding: 0 1.5rem;
+}
+
+.division-card {
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.division-header {
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+}
+.division-icon {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem;
+}
+.div-1 .division-icon { background: rgba(255,127,80,0.1); }
+.div-2 .division-icon { background: rgba(14,165,233,0.1); }
+.div-3 .division-icon { background: rgba(132,204,22,0.1); }
+.div-4 .division-icon { background: rgba(168,85,247,0.1); }
+
+.division-header h2 {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.team-list { padding: 0.5rem; }
+.team-item {
+  padding: 0.7rem 1rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  border: 1px solid transparent;
+}
+.team-item:hover {
+  background: rgba(0,0,0,0.03);
+}
+.team-item .team-crest {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.03);
+  border: 1px solid rgba(0,0,0,0.06);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+.team-item.selected {
+  background: rgba(14, 165, 233, 0.08);
+  border: 1px solid rgba(14, 165, 233, 0.15);
+}
+
+.select-footer {
+  margin-top: 3rem;
+  text-align: center;
+}
+.selected-team-name {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+  min-height: 2rem;
+}
+
+/* ═══════════════════════════════════════════
+   DASHBOARD SCREEN
+   ═══════════════════════════════════════════ */
+#dashboard-screen {
+  padding: 2.5rem 0 4rem;
+  align-items: center;
+}
+
+.dash-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 1100px;
+  padding: 0 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.dash-team-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.dash-team-crest {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: rgba(14, 165, 233, 0.08);
+  border: 2px solid rgba(14, 165, 233, 0.15);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.15rem;
+}
+.dash-team-name {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.dash-team-div {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.dash-matchday { text-align: right; }
+.dash-matchday-label {
+  font-size: 0.68rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+.dash-matchday-num {
+  font-family: var(--font-mono);
+  font-size: 1.6rem;
+  font-weight: 800;
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.dash-body {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 1.5rem;
+  max-width: 1100px;
+  width: 100%;
+  padding: 0 1.5rem;
+}
+
+@media (max-width: 800px) {
+  .dash-body { grid-template-columns: 1fr; }
+}
+
+/* Card Headers */
+.card-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Standings Table */
+.standings-card { overflow: hidden; }
+
+.standings-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.standings-table th {
+  padding: 0.6rem 0.75rem;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  font-family: var(--font-display);
+}
+.standings-table th:not(:first-child):not(:nth-child(2)) { text-align: center; }
+
+.standings-table td {
+  padding: 0.6rem 0.75rem;
+  font-size: 0.82rem;
+  border-bottom: 1px solid rgba(0,0,0,0.03);
+}
+.standings-table td:not(:first-child):not(:nth-child(2)) {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+.standings-table tr:last-child td { border-bottom: none; }
+
+.standings-table .pos {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  width: 30px;
+}
+.standings-table .team-name-cell {
+  font-weight: 600;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+}
+.standings-table .pts {
+  font-weight: 800;
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.standings-table .my-team {
+  background: rgba(14, 165, 233, 0.05);
+}
+.standings-table .my-team .team-name-cell {
+  color: var(--accent-azure);
+}
+
+/* Right Panel */
+.dash-right {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Next Match Card */
+.match-preview {
+  padding: 1.75rem 1.25rem;
+  text-align: center;
+}
+.match-vs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 1rem;
+}
+.match-team { text-align: center; flex: 1; }
+.match-team-crest {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  margin: 0 auto 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.2rem;
+}
+.match-team-crest.home {
+  background: rgba(14, 165, 233, 0.08);
+  border: 2px solid rgba(14, 165, 233, 0.15);
+}
+.match-team-crest.away {
+  background: rgba(255, 127, 80, 0.08);
+  border: 2px solid rgba(255, 127, 80, 0.15);
+}
+.match-team-label {
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.vs-badge {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--text-tertiary);
+  letter-spacing: 0.08em;
+}
+.venue-label {
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Formation Picker */
+.formation-options {
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.formation-btn {
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: 1px solid rgba(0,0,0,0.06);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-body);
+}
+.formation-btn:hover {
+  background: rgba(0,0,0,0.02);
+  border-color: rgba(0,0,0,0.1);
+}
+.formation-btn.selected {
+  background: rgba(14, 165, 233, 0.06);
+  border-color: rgba(14, 165, 233, 0.2);
+}
+
+.formation-num {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 700;
+  min-width: 52px;
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.formation-style {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.play-btn-wrap {
+  padding: 0.75rem;
+  padding-top: 0;
+}
+
+.w-full { width: 100%; }
+
+/* ═══════════════════════════════════════════
+   MATCH RESULT SCREEN
+   ═══════════════════════════════════════════ */
+#match-screen {
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.match-result-container {
+  text-align: center;
+  max-width: 560px;
+  width: 100%;
+  padding: 1.5rem;
+}
+
+.match-result-label {
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 2rem;
+  animation: slideDown 0.5s var(--ease) both;
+}
+
+.scoreboard-card {
+  padding: 2.5rem 2rem;
+  margin-bottom: 2rem;
+}
+
+.scoreboard {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+}
+
+.score-team { flex: 1; text-align: center; }
+.score-team-crest {
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  margin: 0 auto 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem;
+}
+.score-team-crest.home {
+  background: rgba(14, 165, 233, 0.08);
+  border: 2px solid rgba(14, 165, 233, 0.15);
+}
+.score-team-crest.away {
+  background: rgba(255, 127, 80, 0.08);
+  border: 2px solid rgba(255, 127, 80, 0.15);
+}
+.score-team-name {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.score-team-formation {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.score-display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: scaleIn 0.7s var(--ease) 0.25s both;
+}
+.score-num {
+  font-family: var(--font-mono);
+  font-size: 3rem;
+  font-weight: 800;
+  min-width: 50px;
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.score-dash {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  color: var(--text-tertiary);
+}
+
+.match-outcome {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.4rem;
+  animation: fadeUp 0.5s var(--ease) 0.45s both;
+}
+.outcome-win { color: var(--win); }
+.outcome-draw { color: var(--draw); }
+.outcome-loss { color: var(--loss); }
+
+.match-detail {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-bottom: 2rem;
+  animation: fadeUp 0.5s var(--ease) 0.55s both;
+  line-height: 1.5;
+}
+
+.match-actions { animation: fadeUp 0.5s var(--ease) 0.65s both; }
+
+/* ═══════════════════════════════════════════
+   SEASON END SCREEN
+   ═══════════════════════════════════════════ */
+#end-screen {
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.5rem 5rem;
+  position: relative;
+}
+
+.end-content {
+  text-align: center;
+  max-width: 600px;
+  width: 100%;
+}
+
+.end-trophy {
+  font-size: 3.5rem;
+  margin-bottom: 1rem;
+  animation: scaleIn 0.8s var(--ease) both;
+}
+
+.end-title {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 5vw, 2.8rem);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.4rem;
+}
+.end-title.champion {
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.end-subtitle {
+  color: var(--text-secondary);
+  margin-bottom: 2rem;
+  font-size: 1rem;
+}
+
+.end-stats {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+}
+.end-stat {
+  padding: 1rem 1.5rem;
+  text-align: center;
+  min-width: 90px;
+}
+.end-stat-num {
+  font-family: var(--font-mono);
+  font-size: 1.4rem;
+  font-weight: 800;
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.end-stat-label {
+  font-size: 0.65rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.end-standings {
+  overflow: hidden;
+  margin-bottom: 2rem;
+  text-align: left;
+}
+
+.end-actions { margin-top: 0.5rem; }
+
+/* ═══════════════════════════════════════════
+   CONFETTI
+   ═══════════════════════════════════════════ */
+.confetti-container {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+  overflow: hidden;
+}
+.confetti-piece {
+  position: absolute;
+  width: 8px; height: 8px;
+  top: -20px;
+  animation: confettiFall linear forwards;
+}
+@keyframes confettiFall {
+  to { top: 105vh; transform: rotate(720deg); }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════ TITLE SCREEN ═══════════ -->
+<div id="title-screen" class="screen active">
+  <div class="title-content">
+    <div class="title-eyebrow">⚽ Season 2026</div>
+    <h1 class="title-heading"><span class="gradient-text">Pitch Boss</span></h1>
+    <p class="title-sub">Soccer Manager</p>
+    <div class="title-actions">
+      <button class="btn btn-primary btn-lg" onclick="startNewGame()">New Game</button>
+    </div>
+  </div>
+  <div class="title-footer">
+    <span class="tag">4 Divisions</span>
+    <span class="tag">32 Teams</span>
+    <span class="tag">3 Formations</span>
+  </div>
+</div>
+
+<!-- ═══════════ TEAM SELECT ═══════════ -->
+<div id="select-screen" class="screen">
+  <div class="select-header anim-up">
+    <h1>Choose Your <span class="gradient-text">Club</span></h1>
+    <p>Pick a team to manage through the season</p>
+  </div>
+  <div id="divisions-grid" class="divisions-grid"></div>
+  <div class="select-footer anim-up-d4">
+    <div id="selected-team-name" class="selected-team-name"></div>
+    <button id="confirm-btn" class="btn btn-primary btn-lg" style="display:none;" onclick="confirmTeam()">
+      Manage This Club &rarr;
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════ DASHBOARD ═══════════ -->
+<div id="dashboard-screen" class="screen">
+  <div class="dash-top anim-up">
+    <div class="dash-team-info">
+      <div id="dash-crest" class="dash-team-crest"></div>
+      <div>
+        <div id="dash-team-name" class="dash-team-name"></div>
+        <div id="dash-team-div" class="dash-team-div"></div>
+      </div>
+    </div>
+    <div class="dash-matchday">
+      <div class="dash-matchday-label">Match Day</div>
+      <div id="dash-matchday-num" class="dash-matchday-num"></div>
+    </div>
+  </div>
+
+  <div class="dash-body">
+    <div class="standings-card glass anim-up-d1">
+      <div class="card-header">📊 Standings</div>
+      <table class="standings-table">
+        <thead>
+          <tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>Pts</th></tr>
+        </thead>
+        <tbody id="standings-body"></tbody>
+      </table>
+    </div>
+
+    <div class="dash-right">
+      <div class="glass anim-up-d2">
+        <div class="card-header">⚽ Next Match</div>
+        <div class="match-preview">
+          <div class="match-vs">
+            <div class="match-team">
+              <div id="home-crest" class="match-team-crest home"></div>
+              <div id="home-name" class="match-team-label"></div>
+            </div>
+            <div class="vs-badge">VS</div>
+            <div class="match-team">
+              <div id="away-crest" class="match-team-crest away"></div>
+              <div id="away-name" class="match-team-label"></div>
+            </div>
+          </div>
+          <div id="venue-label" class="venue-label"></div>
+        </div>
+      </div>
+
+      <div class="glass anim-up-d3">
+        <div class="card-header">🧩 Formation</div>
+        <div class="formation-options">
+          <button class="formation-btn selected" data-formation="4-4-2" onclick="selectFormation(this)">
+            <span class="formation-num">4-4-2</span>
+            <span class="formation-style">Balanced</span>
+          </button>
+          <button class="formation-btn" data-formation="4-3-3" onclick="selectFormation(this)">
+            <span class="formation-num">4-3-3</span>
+            <span class="formation-style">Attacking</span>
+          </button>
+          <button class="formation-btn" data-formation="5-4-1" onclick="selectFormation(this)">
+            <span class="formation-num">5-4-1</span>
+            <span class="formation-style">Defensive</span>
+          </button>
+        </div>
+        <div class="play-btn-wrap">
+          <button id="play-btn" class="btn btn-primary w-full" onclick="playMatch()">Play Match ▶</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MATCH RESULT ═══════════ -->
+<div id="match-screen" class="screen">
+  <div class="match-result-container">
+    <div class="match-result-label">Match Result</div>
+    <div class="scoreboard-card glass anim-up">
+      <div class="scoreboard">
+        <div class="score-team">
+          <div id="result-home-crest" class="score-team-crest home"></div>
+          <div id="result-home-name" class="score-team-name"></div>
+          <div id="result-home-formation" class="score-team-formation"></div>
+        </div>
+        <div class="score-display">
+          <span id="result-home-score" class="score-num"></span>
+          <span class="score-dash">&mdash;</span>
+          <span id="result-away-score" class="score-num"></span>
+        </div>
+        <div class="score-team">
+          <div id="result-away-crest" class="score-team-crest away"></div>
+          <div id="result-away-name" class="score-team-name"></div>
+          <div id="result-away-formation" class="score-team-formation"></div>
+        </div>
+      </div>
+    </div>
+    <div id="match-outcome" class="match-outcome"></div>
+    <div id="match-detail" class="match-detail"></div>
+    <div class="match-actions">
+      <button id="continue-btn" class="btn btn-primary btn-lg" onclick="continueAfterMatch()">Continue &rarr;</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ SEASON END ═══════════ -->
+<div id="end-screen" class="screen">
+  <div id="confetti" class="confetti-container"></div>
+  <div class="end-content">
+    <div id="end-trophy" class="end-trophy"></div>
+    <div id="end-title" class="end-title anim-up-d1"></div>
+    <div id="end-subtitle" class="end-subtitle anim-up-d2"></div>
+    <div id="end-stats" class="end-stats anim-up-d3"></div>
+    <div class="end-standings glass anim-up-d4">
+      <div class="card-header">📊 Final Standings</div>
+      <table class="standings-table">
+        <thead>
+          <tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>Pts</th></tr>
+        </thead>
+        <tbody id="end-standings-body"></tbody>
+      </table>
+    </div>
+    <div class="end-actions anim-up-d5">
+      <button class="btn btn-primary btn-lg" onclick="startNewGame()">Play Again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════
+   GAME STATE
+   ═══════════════════════════════════════════ */
+const DIVISIONS = 4;
+const TEAMS_PER_DIV = 8;
+
+const ADJECTIVES = [
+  'Royal','Iron','Thunder','Golden','Shadow','Crystal','Crimson','Silver',
+  'Blazing','Midnight','Storm','Savage','Noble','Cosmic','Phantom','Brave',
+  'Mystic','Steel','Rogue','Titan','Frost','Ember','Venom','Swift',
+  'Eclipse','Primal','Onyx','Jade','Scarlet','Azure','Ivory','Obsidian',
+  'Radiant','Dark','Ancient','Wild','Neon','Grand','Polar','Fiery'
+];
+const NOUNS = [
+  'Lions','Eagles','Wolves','Dragons','Vipers','Hawks','Bears','Foxes',
+  'Panthers','Sharks','Falcons','Stallions','Ravens','Cobras','Jaguars','Rams',
+  'Tigers','Hornets','Condors','Leopards','Bisons','Rhinos','Scorpions','Owls',
+  'Knights','Rovers','Strikers','Wanderers','United','City','Athletic','Dynamo',
+  'Phoenix','Spartans','Titans','Gladiators','Warriors','Rangers','Legends','Hurricanes'
+];
+const DIVISION_NAMES = ['Premier League', 'Championship', 'League One', 'League Two'];
+const DIVISION_EMOJI = ['🏆', '🥈', '🥉', '⭐'];
+const CRESTS = ['⚽','🔴','🔵','🟢','🟡','🟣','🟠','⚪','🏴','🏳️','🦁','🦅','🐺','🐉','🐍','🦊','🐻','🦈','🐆','🦂','⚔️','🛡️','👑','💎','🔥','⭐','💫','🌟','✨','🎯','🏰','🗡️'];
+const FORMATIONS = ['4-4-2', '4-3-3', '5-4-1'];
+
+let game = {};
+
+/* ═══════════════════════════════════════════
+   TEAM GENERATION
+   ═══════════════════════════════════════════ */
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function generateTeams() {
+  const usedNames = new Set();
+  const teams = [];
+  const shuffledAdj = shuffle(ADJECTIVES);
+  const shuffledNoun = shuffle(NOUNS);
+  let ai = 0, ni = 0;
+
+  for (let i = 0; i < DIVISIONS * TEAMS_PER_DIV; i++) {
+    let name;
+    do {
+      name = shuffledAdj[ai % shuffledAdj.length] + ' ' + shuffledNoun[ni % shuffledNoun.length];
+      ni++;
+      if (ni % shuffledNoun.length === 0) ai++;
+    } while (usedNames.has(name));
+
+    usedNames.add(name);
+    teams.push({
+      id: i,
+      name,
+      division: Math.floor(i / TEAMS_PER_DIV),
+      crest: CRESTS[i % CRESTS.length],
+      stats: { played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, pts: 0 }
+    });
+  }
+  return teams;
+}
+
+/* ═══════════════════════════════════════════
+   SCHEDULE ENGINE
+   ═══════════════════════════════════════════ */
+function generateSchedule(divisionTeams) {
+  const n = divisionTeams.length;
+  const rounds = [];
+  const ids = divisionTeams.map(t => t.id);
+  const list = ids.slice(1);
+
+  for (let r = 0; r < n - 1; r++) {
+    const round = [];
+    round.push([ids[0], list[0]]);
+    for (let i = 1; i <= Math.floor((n - 1) / 2); i++) {
+      round.push([list[i], list[n - 2 - i + 1]]);
+    }
+    rounds.push(round);
+    list.push(list.shift());
+  }
+
+  const secondHalf = rounds.map(round => round.map(([h, a]) => [a, h]));
+  return [...rounds, ...secondHalf];
+}
+
+/* ═══════════════════════════════════════════
+   MATCH SIMULATION
+   ═══════════════════════════════════════════ */
+function getFormationAdvantage(f1, f2) {
+  if (f1 === f2) return 0;
+  if (f1 === '4-3-3' && f2 === '4-4-2') return 1;
+  if (f1 === '5-4-1' && f2 === '4-3-3') return 1;
+  if (f1 === '4-4-2' && f2 === '5-4-1') return 1;
+  return -1;
+}
+
+function simulateMatch(homeId, awayId, homeFormation, awayFormation) {
+  const advantage = getFormationAdvantage(homeFormation, awayFormation);
+  let homeGoals = Math.floor(Math.random() * 4);
+  let awayGoals = Math.floor(Math.random() * 4);
+  if (Math.random() < 0.3) homeGoals++;
+  if (advantage === 1) homeGoals = Math.min(homeGoals + 1, 6);
+  if (advantage === -1) awayGoals = Math.min(awayGoals + 1, 6);
+  return { homeGoals, awayGoals, homeFormation, awayFormation };
+}
+
+function updateStats(teamId, gf, ga) {
+  const team = game.teams.find(t => t.id === teamId);
+  team.stats.played++;
+  team.stats.gf += gf;
+  team.stats.ga += ga;
+  if (gf > ga) { team.stats.won++; team.stats.pts += 3; }
+  else if (gf === ga) { team.stats.drawn++; team.stats.pts += 1; }
+  else { team.stats.lost++; }
+}
+
+/* ═══════════════════════════════════════════
+   UI HELPERS
+   ═══════════════════════════════════════════ */
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+function getTeam(id) { return game.teams.find(t => t.id === id); }
+
+function getSortedStandings() {
+  const divTeams = game.teams.filter(t => t.division === game.playerDivision);
+  return [...divTeams].sort((a, b) => {
+    if (b.stats.pts !== a.stats.pts) return b.stats.pts - a.stats.pts;
+    const gdA = a.stats.gf - a.stats.ga, gdB = b.stats.gf - b.stats.ga;
+    if (gdB !== gdA) return gdB - gdA;
+    return b.stats.gf - a.stats.gf;
+  });
+}
+
+/* ═══════════════════════════════════════════
+   GAME FLOW
+   ═══════════════════════════════════════════ */
+function startNewGame() {
+  game = {
+    teams: generateTeams(),
+    selectedTeam: null,
+    playerDivision: null,
+    schedule: null,
+    matchDay: 0,
+    formation: '4-4-2'
+  };
+  renderTeamSelect();
+  showScreen('select-screen');
+}
+
+function renderTeamSelect() {
+  const grid = document.getElementById('divisions-grid');
+  grid.innerHTML = '';
+
+  for (let d = 0; d < DIVISIONS; d++) {
+    const divTeams = game.teams.filter(t => t.division === d);
+    const card = document.createElement('div');
+    const delayClass = ['anim-up-d1','anim-up-d2','anim-up-d3','anim-up-d4'][d];
+    card.className = 'division-card glass div-' + (d + 1) + ' ' + delayClass;
+    card.innerHTML =
+      '<div class="division-header">' +
+        '<div class="division-icon">' + DIVISION_EMOJI[d] + '</div>' +
+        '<h2>' + DIVISION_NAMES[d] + '</h2>' +
+      '</div>' +
+      '<div class="team-list">' +
+        divTeams.map(t =>
+          '<div class="team-item" data-team-id="' + t.id + '" onclick="selectTeam(' + t.id + ')">' +
+            '<div class="team-crest">' + t.crest + '</div>' +
+            '<span>' + t.name + '</span>' +
+          '</div>'
+        ).join('') +
+      '</div>';
+    grid.appendChild(card);
+  }
+
+  document.getElementById('selected-team-name').textContent = '';
+  document.getElementById('confirm-btn').style.display = 'none';
+}
+
+function selectTeam(id) {
+  game.selectedTeam = id;
+  const team = getTeam(id);
+  document.querySelectorAll('.team-item').forEach(el => el.classList.remove('selected'));
+  document.querySelector('[data-team-id="' + id + '"]').classList.add('selected');
+  document.getElementById('selected-team-name').textContent = team.crest + ' ' + team.name;
+  document.getElementById('confirm-btn').style.display = 'inline-flex';
+}
+
+function confirmTeam() {
+  const team = getTeam(game.selectedTeam);
+  game.playerDivision = team.division;
+  const divTeams = game.teams.filter(t => t.division === game.playerDivision);
+  game.schedule = generateSchedule(divTeams);
+  game.matchDay = 0;
+  game.formation = '4-4-2';
+  renderDashboard();
+  showScreen('dashboard-screen');
+}
+
+function renderDashboard() {
+  const team = getTeam(game.selectedTeam);
+  document.getElementById('dash-crest').textContent = team.crest;
+  document.getElementById('dash-team-name').textContent = team.name;
+  document.getElementById('dash-team-div').textContent = DIVISION_NAMES[game.playerDivision];
+  document.getElementById('dash-matchday-num').textContent = (game.matchDay + 1) + ' / ' + game.schedule.length;
+  renderStandings('standings-body');
+  renderNextMatch();
+  resetFormationUI();
+}
+
+function renderStandings(tbodyId) {
+  const sorted = getSortedStandings();
+  document.getElementById(tbodyId).innerHTML = sorted.map(function(t, i) {
+    return '<tr class="' + (t.id === game.selectedTeam ? 'my-team' : '') + '">' +
+      '<td class="pos">' + (i + 1) + '</td>' +
+      '<td class="team-name-cell">' + t.crest + ' ' + t.name + '</td>' +
+      '<td>' + t.stats.played + '</td>' +
+      '<td>' + t.stats.won + '</td>' +
+      '<td>' + t.stats.drawn + '</td>' +
+      '<td>' + t.stats.lost + '</td>' +
+      '<td>' + t.stats.gf + '</td>' +
+      '<td>' + t.stats.ga + '</td>' +
+      '<td class="pts">' + t.stats.pts + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function renderNextMatch() {
+  const match = game.schedule[game.matchDay];
+  const playerMatch = match.find(function(m) {
+    return m[0] === game.selectedTeam || m[1] === game.selectedTeam;
+  });
+  if (!playerMatch) return;
+  const homeId = playerMatch[0], awayId = playerMatch[1];
+  const home = getTeam(homeId), away = getTeam(awayId);
+  document.getElementById('home-crest').textContent = home.crest;
+  document.getElementById('home-name').textContent = home.name;
+  document.getElementById('away-crest').textContent = away.crest;
+  document.getElementById('away-name').textContent = away.name;
+  document.getElementById('venue-label').textContent = homeId === game.selectedTeam ? '🏟️ Home Match' : '✈️ Away Match';
+}
+
+function resetFormationUI() {
+  document.querySelectorAll('.formation-btn').forEach(function(btn) {
+    btn.classList.toggle('selected', btn.dataset.formation === game.formation);
+  });
+}
+
+function selectFormation(btn) {
+  game.formation = btn.dataset.formation;
+  document.querySelectorAll('.formation-btn').forEach(function(b) { b.classList.remove('selected'); });
+  btn.classList.add('selected');
+}
+
+/* ═══════════════════════════════════════════
+   PLAY MATCH
+   ═══════════════════════════════════════════ */
+function playMatch() {
+  const round = game.schedule[game.matchDay];
+  for (let idx = 0; idx < round.length; idx++) {
+    const homeId = round[idx][0], awayId = round[idx][1];
+    const isPlayerMatch = homeId === game.selectedTeam || awayId === game.selectedTeam;
+    const homeFormation = homeId === game.selectedTeam ? game.formation : FORMATIONS[Math.floor(Math.random() * FORMATIONS.length)];
+    const awayFormation = awayId === game.selectedTeam ? game.formation : FORMATIONS[Math.floor(Math.random() * FORMATIONS.length)];
+    const result = simulateMatch(homeId, awayId, homeFormation, awayFormation);
+    updateStats(homeId, result.homeGoals, result.awayGoals);
+    updateStats(awayId, result.awayGoals, result.homeGoals);
+    if (isPlayerMatch) {
+      game.lastResult = { homeId: homeId, awayId: awayId, homeGoals: result.homeGoals, awayGoals: result.awayGoals, homeFormation: result.homeFormation, awayFormation: result.awayFormation };
+    }
+  }
+  renderMatchResult();
+  showScreen('match-screen');
+}
+
+function renderMatchResult() {
+  const r = game.lastResult;
+  const home = getTeam(r.homeId), away = getTeam(r.awayId);
+  const isHome = r.homeId === game.selectedTeam;
+
+  document.getElementById('result-home-crest').textContent = home.crest;
+  document.getElementById('result-home-name').textContent = home.name;
+  document.getElementById('result-home-formation').textContent = r.homeFormation;
+  document.getElementById('result-away-crest').textContent = away.crest;
+  document.getElementById('result-away-name').textContent = away.name;
+  document.getElementById('result-away-formation').textContent = r.awayFormation;
+  document.getElementById('result-home-score').textContent = r.homeGoals;
+  document.getElementById('result-away-score').textContent = r.awayGoals;
+
+  const myGoals = isHome ? r.homeGoals : r.awayGoals;
+  const theirGoals = isHome ? r.awayGoals : r.homeGoals;
+  const outcomeEl = document.getElementById('match-outcome');
+  const detailEl = document.getElementById('match-detail');
+
+  if (myGoals > theirGoals) {
+    outcomeEl.textContent = 'Victory';
+    outcomeEl.className = 'match-outcome outcome-win';
+    detailEl.textContent = pickPhrase('win');
+  } else if (myGoals === theirGoals) {
+    outcomeEl.textContent = 'Draw';
+    outcomeEl.className = 'match-outcome outcome-draw';
+    detailEl.textContent = pickPhrase('draw');
+  } else {
+    outcomeEl.textContent = 'Defeat';
+    outcomeEl.className = 'match-outcome outcome-loss';
+    detailEl.textContent = pickPhrase('loss');
+  }
+
+  document.getElementById('continue-btn').innerHTML =
+    game.matchDay + 1 >= game.schedule.length ? 'View Final Standings &rarr;' : 'Continue &rarr;';
+}
+
+function pickPhrase(type) {
+  var phrases = {
+    win: [
+      'A commanding performance from your squad.',
+      'The fans are on their feet! What a display.',
+      'Your tactics paid off brilliantly today.',
+      'A well-deserved three points in the bag.',
+      'Clinical finishing sealed the deal.'
+    ],
+    draw: [
+      'A hard-fought point earned today.',
+      'Both sides cancel each other out.',
+      'Honours even at the final whistle.',
+      'A fair result given the balance of play.',
+      'So close to a winner, but it was not to be.'
+    ],
+    loss: [
+      'A tough day at the office for your team.',
+      'Back to the training ground after this one.',
+      'The opposition proved too strong today.',
+      'A disappointing result for the fans.',
+      'Lessons to learn from this setback.'
+    ]
+  };
+  var list = phrases[type];
+  return list[Math.floor(Math.random() * list.length)];
+}
+
+function continueAfterMatch() {
+  game.matchDay++;
+  if (game.matchDay >= game.schedule.length) {
+    renderSeasonEnd();
+    showScreen('end-screen');
+  } else {
+    renderDashboard();
+    showScreen('dashboard-screen');
+  }
+}
+
+/* ═══════════════════════════════════════════
+   SEASON END
+   ═══════════════════════════════════════════ */
+function renderSeasonEnd() {
+  const sorted = getSortedStandings();
+  const myTeam = getTeam(game.selectedTeam);
+  const myPos = sorted.findIndex(function(t) { return t.id === game.selectedTeam; }) + 1;
+
+  const trophy = document.getElementById('end-trophy');
+  const title = document.getElementById('end-title');
+  const subtitle = document.getElementById('end-subtitle');
+
+  if (myPos === 1) {
+    trophy.textContent = '🏆';
+    title.textContent = 'Champions!';
+    title.className = 'end-title champion anim-up-d1';
+    subtitle.textContent = myTeam.name + ' are the ' + DIVISION_NAMES[game.playerDivision] + ' champions!';
+    spawnConfetti();
+  } else if (myPos <= 3) {
+    trophy.textContent = '🥈';
+    title.textContent = 'Great Season!';
+    title.className = 'end-title anim-up-d1';
+    title.style.color = 'var(--win)';
+    subtitle.textContent = myTeam.name + ' finished ' + ordinal(myPos) + ' \u2014 a top 3 finish!';
+  } else {
+    trophy.textContent = '📋';
+    title.textContent = 'Season Over';
+    title.className = 'end-title anim-up-d1';
+    title.style.color = 'var(--text-primary)';
+    subtitle.textContent = myTeam.name + ' finished ' + ordinal(myPos) + '. There is always next season.';
+  }
+
+  document.getElementById('end-stats').innerHTML =
+    '<div class="end-stat glass">' +
+      '<div class="end-stat-num">' + myTeam.stats.won + '</div>' +
+      '<div class="end-stat-label">Wins</div>' +
+    '</div>' +
+    '<div class="end-stat glass">' +
+      '<div class="end-stat-num">' + myTeam.stats.drawn + '</div>' +
+      '<div class="end-stat-label">Draws</div>' +
+    '</div>' +
+    '<div class="end-stat glass">' +
+      '<div class="end-stat-num">' + myTeam.stats.lost + '</div>' +
+      '<div class="end-stat-label">Losses</div>' +
+    '</div>' +
+    '<div class="end-stat glass">' +
+      '<div class="end-stat-num">' + myTeam.stats.gf + '</div>' +
+      '<div class="end-stat-label">Goals</div>' +
+    '</div>';
+
+  renderStandings('end-standings-body');
+}
+
+function ordinal(n) {
+  var s = ['th','st','nd','rd'];
+  var v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function spawnConfetti() {
+  var container = document.getElementById('confetti');
+  container.innerHTML = '';
+  var colors = ['#ff7f50','#0ea5e9','#84cc16','#fbbf24','#a78bfa','#f472b6'];
+  for (var i = 0; i < 50; i++) {
+    var piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    piece.style.left = Math.random() * 100 + '%';
+    piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+    piece.style.width = (5 + Math.random() * 7) + 'px';
+    piece.style.height = (5 + Math.random() * 7) + 'px';
+    piece.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+    piece.style.animationDuration = (2.5 + Math.random() * 3) + 's';
+    piece.style.animationDelay = (Math.random() * 2) + 's';
+    piece.style.opacity = 0.6 + Math.random() * 0.4;
+    container.appendChild(piece);
+  }
+}
+</script>
+</body>
+</html>
