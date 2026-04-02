@@ -59,6 +59,7 @@ let sessionCreatePromise: Promise<CopilotSession> | undefined;
 // Message queue — serializes access to the single persistent session
 type QueuedMessage = {
   prompt: string;
+  attachments?: Array<{ type: "file"; path: string; displayName?: string }>;
   callback: MessageCallback;
   sourceChannel?: "telegram" | "tui";
   resolve: (value: string) => void;
@@ -285,7 +286,11 @@ export async function initOrchestrator(client: CopilotClient): Promise<void> {
 }
 
 /** Send a prompt on the persistent session, return the response. */
-async function executeOnSession(prompt: string, callback: MessageCallback): Promise<string> {
+async function executeOnSession(
+  prompt: string,
+  callback: MessageCallback,
+  attachments?: Array<{ type: "file"; path: string; displayName?: string }>
+): Promise<string> {
   const session = await ensureOrchestratorSession();
   currentCallback = callback;
 
@@ -320,7 +325,10 @@ async function executeOnSession(prompt: string, callback: MessageCallback): Prom
   });
 
   try {
-    const result = await session.sendAndWait({ prompt: enrichedPrompt }, 300_000);
+    const result = await session.sendAndWait(
+      { prompt: enrichedPrompt, ...(attachments && attachments.length > 0 ? { attachments } : {}) },
+      300_000
+    );
     const finalContent = result?.data?.content || accumulated || "(No response)";
     return finalContent;
   } catch (err) {
@@ -378,7 +386,7 @@ async function processQueue(): Promise<void> {
       }
       lastRouteResult = routeResult;
 
-      const result = await executeOnSession(item.prompt, item.callback);
+      const result = await executeOnSession(item.prompt, item.callback, item.attachments);
       item.resolve(result);
     } catch (err) {
       item.reject(err);
@@ -397,7 +405,8 @@ function isRecoverableError(err: unknown): boolean {
 export async function sendToOrchestrator(
   prompt: string,
   source: MessageSource,
-  callback: MessageCallback
+  callback: MessageCallback,
+  attachments?: Array<{ type: "file"; path: string; displayName?: string }>
 ): Promise<void> {
   const sourceLabel =
     source.type === "telegram" ? "telegram" :
@@ -422,7 +431,7 @@ export async function sendToOrchestrator(
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         const finalContent = await new Promise<string>((resolve, reject) => {
-          messageQueue.push({ prompt: taggedPrompt, callback, sourceChannel, resolve, reject });
+          messageQueue.push({ prompt: taggedPrompt, attachments, callback, sourceChannel, resolve, reject });
           processQueue();
         });
         // Deliver response to user FIRST, then log best-effort
