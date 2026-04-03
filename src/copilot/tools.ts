@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { approveAll, defineTool, type CopilotClient, type CopilotSession, type Tool } from "@github/copilot-sdk";
-import { getDb, addMemory, searchMemories, removeMemory } from "../store/db.js";
+import { getDb, addMemory, searchMemories, removeMemory, updateMemory, type MemoryCategory } from "../store/db.js";
 import { readdirSync, readFileSync, statSync } from "fs";
 import { join, sep, resolve } from "path";
 import { homedir } from "os";
@@ -486,16 +486,24 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
         "Save something to Max's long-term memory. Use when the user says 'remember that...', " +
         "states a preference, shares a fact about themselves, or mentions something important " +
         "that should be remembered across conversations. Also use proactively when you detect " +
-        "important information worth persisting.",
+        "important information worth persisting. Memories are auto-extracted from conversations too, " +
+        "but explicit saves are more reliable for critical facts.",
       parameters: z.object({
-        category: z.enum(["preference", "fact", "project", "person", "routine"])
-          .describe("Category: preference (likes/dislikes/settings), fact (general knowledge), project (codebase/repo info), person (people info), routine (schedules/habits)"),
+        category: z.enum(["preference", "fact", "project", "person", "routine", "task", "decision", "context"])
+          .describe("Category: preference, fact, project, person, routine, task (active work), decision (choices made), context (situational)"),
         content: z.string().describe("The thing to remember — a concise, self-contained statement"),
         source: z.enum(["user", "auto"]).optional().describe("'user' if explicitly asked to remember, 'auto' if Max detected it (default: 'user')"),
+        importance: z.number().int().min(1).max(5).optional()
+          .describe("1-5 importance: 5=critical identity/project info, 3=useful context (default), 1=ephemeral"),
       }),
       handler: async (args) => {
-        const id = addMemory(args.category, args.content, args.source || "user");
-        return `Remembered (#${id}, ${args.category}): "${args.content}"`;
+        const id = addMemory(
+          args.category as MemoryCategory,
+          args.content,
+          args.source || "user",
+          args.importance ?? 3,
+        );
+        return `Remembered (#${id}, ${args.category}, importance:${args.importance ?? 3}): "${args.content}"`;
       },
     }),
 
@@ -506,7 +514,7 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
         "asks 'do you remember...?' or 'what do you know about...?'",
       parameters: z.object({
         keyword: z.string().optional().describe("Search term to match against memory content"),
-        category: z.enum(["preference", "fact", "project", "person", "routine"]).optional()
+        category: z.enum(["preference", "fact", "project", "person", "routine", "task", "decision", "context"]).optional()
           .describe("Optional: filter by category"),
       }),
       handler: async (args) => {
@@ -518,6 +526,32 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
           (m) => `• #${m.id} [${m.category}] ${m.content} (${m.source}, ${m.created_at})`
         );
         return `Found ${results.length} memory/memories:\n${lines.join("\n")}`;
+      },
+    }),
+
+    defineTool("update_memory", {
+      description:
+        "Update an existing memory — change its content, importance, or context. " +
+        "Use when a fact changes (e.g., user switches jobs, project details change). " +
+        "Requires the memory ID (use recall to find it first).",
+      parameters: z.object({
+        memory_id: z.number().int().describe("The memory ID to update (from recall results)"),
+        content: z.string().optional().describe("New content (if changing)"),
+        importance: z.number().int().min(1).max(5).optional().describe("New importance (1-5)"),
+        context: z.string().optional().describe("New context note"),
+      }),
+      handler: async (args) => {
+        const updates: { content?: string; importance?: number; context?: string } = {};
+        if (args.content !== undefined) updates.content = args.content;
+        if (args.importance !== undefined) updates.importance = args.importance;
+        if (args.context !== undefined) updates.context = args.context;
+        if (Object.keys(updates).length === 0) {
+          return `No update fields provided. Specify at least one of: content, importance, context.`;
+        }
+        const ok = updateMemory(args.memory_id, updates);
+        return ok
+          ? `Memory #${args.memory_id} updated.`
+          : `Memory #${args.memory_id} not found.`;
       },
     }),
 

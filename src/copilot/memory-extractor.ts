@@ -1,6 +1,4 @@
-import { addMemory, findSimilarMemory } from "../store/db.js";
-
-type MemoryCategory = "preference" | "fact" | "project" | "person" | "routine";
+import { addMemory, findSimilarMemory, type MemoryCategory } from "../store/db.js";
 
 interface ExtractedMemory {
   category: MemoryCategory;
