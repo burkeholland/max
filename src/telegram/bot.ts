@@ -6,6 +6,9 @@ import { searchMemories } from "../store/db.js";
 import { listSkills } from "../copilot/skills.js";
 import { restartDaemon } from "../daemon.js";
 import { getRouterConfig, updateRouterConfig } from "../copilot/router.js";
+import { getStickyAgent, getAllStickyAgents } from "../agents/mentions.js";
+import { getAgent, listAgents } from "../agents/registry.js";
+import { getAllAgentStatuses } from "../agents/bus.js";
 import { tmpdir } from "os";
 import { join } from "path";
 import { writeFile, unlink } from "fs/promises";
@@ -97,9 +100,12 @@ export function createBot(): Bot {
   bot.command("help", (ctx) =>
     ctx.reply(
       "I'm Max, your AI daemon.\n\n" +
-        "Just send me a message and I'll handle it.\n\n" +
+        "Just send me a message and I'll handle it.\n" +
+        "Use @agent to talk to a specialist (e.g. @designer, @coder).\n" +
+        "Use @max to return to me.\n\n" +
         "Commands:\n" +
         "/cancel — Cancel the current message\n" +
+        "/agent — Show current specialist / list agents\n" +
         "/model — Show current model\n" +
         "/model <name> — Switch model\n" +
         "/models — List all available models\n" +
@@ -204,6 +210,33 @@ export function createBot(): Bot {
       ? "⚡ Auto mode on"
       : `Auto mode off · using ${config.copilotModel}`;
     await ctx.reply(label);
+  });
+
+  bot.command("agent", async (ctx) => {
+    const sticky = getStickyAgent("telegram");
+    if (sticky) {
+      const agentConfig = getAgent(sticky);
+      const label = agentConfig
+        ? `${agentConfig.emoji} Currently talking to **${agentConfig.name}** (@${sticky})`
+        : `Currently talking to @${sticky}`;
+      await ctx.reply(label + "\n\nUse @max to return to Max.");
+    } else {
+      const agents = listAgents();
+      if (agents.length === 0) {
+        await ctx.reply("Talking to Max (no specialists configured).");
+      } else {
+        const statuses = getAllAgentStatuses();
+        const lines = statuses.map((s) => {
+          const statusIcon = s.status === "running" ? "🔄" : s.status === "idle" ? "💤" : s.status === "error" ? "❌" : "⬜";
+          return `${s.emoji} ${s.name} (@${s.slug}) ${statusIcon} ${s.status}`;
+        });
+        await ctx.reply(
+          "Talking to Max.\n\n" +
+          "Specialists:\n" + lines.join("\n") +
+          "\n\nUse @agent to talk to a specialist."
+        );
+      }
+    }
   });
 
   // Handle all text messages

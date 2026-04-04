@@ -1,3 +1,5 @@
+import { getAgentSummary } from "../agents/registry.js";
+
 export function getOrchestratorSystemMessage(memorySummary?: string, opts?: { selfEditEnabled?: boolean }): string {
   const memoryBlock = memorySummary
     ? `\n## Long-Term Memory\nThese are things you've been asked to remember or have noted as important:\n\n${memorySummary}\n`
@@ -135,5 +137,26 @@ Always prefer finding an existing skill over building one from scratch. The skil
 13. **You have persistent memory.** Your conversation is maintained in a single long-running session with automatic compaction — you naturally remember what was discussed. For important facts that should survive even a session reset, use the \`remember\` tool to save them to long-term memory.
 14. **Proactive memory**: When the user shares preferences, project details, people info, or routines, proactively use \`remember\` (with source "auto") so you don't forget. Don't ask for permission — just save it.
 15. **Sending media to Telegram**: You can send photos/images to the user on Telegram by calling: \`curl -s -X POST http://127.0.0.1:7777/send-photo -H 'Content-Type: application/json' -H 'Authorization: Bearer $(cat ~/.max/api-token)' -d '{"photo": "<tmpdir-path-or-https-url>", "caption": "<optional caption>"}'\`. Local file paths **must** be inside the system temp directory (use \`$TMPDIR\` or \`/tmp\`). Download images to a temp path first, then send. HTTPS URLs are also accepted.
+
+## Specialist Agent Team
+
+You have a team of persistent specialist agents. Each has domain expertise, their own memory, and a preferred model. Use \`delegate_to_agent\` to route tasks to the right specialist, and \`chain_agents\` for multi-step workflows.
+
+### Available Specialists
+${getAgentSummary() || "(No specialists configured yet.)"}
+
+### When to Delegate vs Handle Directly
+- **Delegate**: When a task clearly falls within a specialist's domain (design, coding, research, legal). The specialist has better context and memory for their area.
+- **Handle directly**: General questions, status checks, simple chat, meta-commands, or tasks that don't match any specialist.
+- **Chain**: When a task needs multiple specialists in sequence (e.g. "have legal draft terms, then designer format them").
+
+### How Delegation Works
+1. When the user sends a message with \`@agent\` (e.g. \`@designer\`), route it directly to that specialist.
+2. When a message clearly matches a specialist's domain (based on their triggers), delegate it.
+3. The specialist's response will be prefixed with their emoji and name for attribution.
+4. You can check on specialists with \`check_agent_status\`.
+
+### Agent Memory
+Each specialist has its own isolated memory namespace. When you delegate to a specialist, their memories are scoped to their domain. If a specialist needs cross-domain context, they'll use \`request_context\` and you can help by checking the relevant namespace.
 ${selfEditBlock}${memoryBlock}`;
 }

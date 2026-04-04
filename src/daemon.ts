@@ -6,6 +6,8 @@ import { getDb, closeDb } from "./store/db.js";
 import { config } from "./config.js";
 import { spawn } from "child_process";
 import { checkForUpdate } from "./update.js";
+import { initAgentBus, shutdownAgentBus } from "./agents/bus.js";
+import { loadAgents } from "./agents/registry.js";
 
 function truncate(text: string, max = 200): string {
   const oneLine = text.replace(/\n/g, " ").trim();
@@ -38,6 +40,12 @@ async function main(): Promise<void> {
   console.log("[max] Creating orchestrator session...");
   await initOrchestrator(client);
   console.log("[max] Orchestrator session ready");
+
+  // Load agent registry and initialize AgentBus
+  const agentConfigs = loadAgents();
+  console.log(`[max] Loaded ${agentConfigs.size} agent definition(s): ${Array.from(agentConfigs.keys()).join(", ") || "(none)"}`);
+  initAgentBus(client);
+  console.log("[max] AgentBus initialized (agents spawn lazily on first use)");
 
   // Wire up proactive notifications — route to the originating channel
   setProactiveNotify((text, channel) => {
@@ -117,6 +125,9 @@ async function shutdown(): Promise<void> {
     try { await stopBot(); } catch { /* best effort */ }
   }
 
+  // Destroy all specialist agent sessions
+  try { await shutdownAgentBus(); } catch { /* best effort */ }
+
   // Destroy all active worker sessions to free memory
   await Promise.allSettled(
     Array.from(workers.values()).map((w) => w.session.destroy())
@@ -143,6 +154,9 @@ export async function restartDaemon(): Promise<void> {
     await sendProactiveMessage("Restarting — back in a sec ⏳").catch(() => {});
     try { await stopBot(); } catch { /* best effort */ }
   }
+
+  // Destroy all specialist agent sessions
+  try { await shutdownAgentBus(); } catch { /* best effort */ }
 
   // Destroy all active worker sessions to free memory
   await Promise.allSettled(

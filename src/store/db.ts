@@ -43,6 +43,7 @@ export function getDb(): Database.Database {
         category TEXT NOT NULL CHECK(category IN ('preference', 'fact', 'project', 'person', 'routine')),
         content TEXT NOT NULL,
         source TEXT NOT NULL DEFAULT 'user',
+        namespace TEXT NOT NULL DEFAULT 'global',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         last_accessed DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -68,6 +69,27 @@ export function getDb(): Database.Database {
     }
     // Prune conversation log at startup — keep more history for better recovery
     db.prepare(`DELETE FROM conversation_log WHERE id NOT IN (SELECT id FROM conversation_log ORDER BY id DESC LIMIT 1000)`).run();
+
+    // Migrate: add namespace column to memories if it doesn't exist
+    try {
+      db.prepare(`SELECT namespace FROM memories LIMIT 1`).get();
+    } catch {
+      db.exec(`ALTER TABLE memories ADD COLUMN namespace TEXT NOT NULL DEFAULT 'global'`);
+    }
+    // Ensure index exists for namespace queries
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_memories_namespace ON memories(namespace)`);
+
+    // Agent sessions table — tracks persistent specialist Copilot sessions
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS agent_sessions (
+        slug TEXT PRIMARY KEY,
+        copilot_session_id TEXT NOT NULL,
+        model TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'idle',
+        last_active DATETIME DEFAULT CURRENT_TIMESTAMP,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
     // Set up FTS5 for memory search (graceful fallback if not available)
     try {
@@ -434,6 +456,37 @@ export function runMemoryMaintenance(): { deduped: number; pruned: number; cappe
   const pruned = pruneStaleMemories();
   const capped = capAutoMemories();
   return { deduped, pruned, capped };
+}
+
+// ---------------------------------------------------------------------------
+// Agent session persistence
+// ---------------------------------------------------------------------------
+
+export function saveAgentSession(slug: string, sessionId: string, model: string): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT OR REPLACE INTO agent_sessions (slug, copilot_session_id, model, status, last_active) VALUES (?, ?, ?, 'idle', CURRENT_TIMESTAMP)`
+  ).run(slug, sessionId, model);
+}
+
+export function getAgentSession(slug: string): { copilot_session_id: string; model: string; status: string } | undefined {
+  const db = getDb();
+  return db.prepare(`SELECT copilot_session_id, model, status FROM agent_sessions WHERE slug = ?`).get(slug) as { copilot_session_id: string; model: string; status: string } | undefined;
+}
+
+export function updateAgentSessionStatus(slug: string, status: string): void {
+  const db = getDb();
+  db.prepare(`UPDATE agent_sessions SET status = ?, last_active = CURRENT_TIMESTAMP WHERE slug = ?`).run(status, slug);
+}
+
+export function deleteAgentSession(slug: string): void {
+  const db = getDb();
+  db.prepare(`DELETE FROM agent_sessions WHERE slug = ?`).run(slug);
+}
+
+export function listAgentSessions(): { slug: string; copilot_session_id: string; model: string; status: string; last_active: string }[] {
+  const db = getDb();
+  return db.prepare(`SELECT slug, copilot_session_id, model, status, last_active FROM agent_sessions`).all() as { slug: string; copilot_session_id: string; model: string; status: string; last_active: string }[];
 }
 
 export function closeDb(): void {

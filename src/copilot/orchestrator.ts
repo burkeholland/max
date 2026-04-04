@@ -9,6 +9,9 @@ import { logConversation, getState, setState, deleteState, getMemorySummary, get
 import { SESSIONS_DIR } from "../paths.js";
 import { resolveModel, type Tier, type RouteResult } from "./router.js";
 import { extractAndSaveMemories } from "./memory-extractor.js";
+import { parseMention, getStickyAgent, setStickyAgent, clearStickyAgent } from "../agents/mentions.js";
+import { dispatch as agentDispatch } from "../agents/bus.js";
+import { getAgent } from "../agents/registry.js";
 
 const MAX_RETRIES = 3;
 const RECONNECT_DELAYS_MS = [1_000, 3_000, 10_000];
@@ -413,6 +416,57 @@ export async function sendToOrchestrator(
     source.type === "tui" ? "tui" : "background";
   logMessage("in", sourceLabel, prompt);
 
+  // --- @mention pre-routing ---
+  // For non-background messages, check for @agent mentions or sticky sessions
+  if (source.type !== "background") {
+    const mention = parseMention(prompt);
+    const channel = sourceLabel;
+
+    if (mention.isMaxMention) {
+      // @max → clear sticky, route to orchestrator
+      clearStickyAgent(channel);
+    } else if (mention.agent) {
+      // @agent → set sticky, route directly to specialist
+      setStickyAgent(channel, mention.agent);
+      const agentConfig = getAgent(mention.agent);
+      const prefix = agentConfig ? `${agentConfig.emoji} **${agentConfig.name}**: ` : "";
+      callback("", false); // signal start
+      try {
+        const response = await agentDispatch(mention.agent, mention.text);
+        const attributed = `${prefix}${response}`;
+        callback(attributed, true);
+        try { logMessage("out", sourceLabel, attributed); } catch { /* best-effort */ }
+        try { logConversation("user", prompt, sourceLabel); } catch { /* best-effort */ }
+        try { logConversation("assistant", attributed, sourceLabel); } catch { /* best-effort */ }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        callback(`Error from @${mention.agent}: ${msg}`, true);
+      }
+      return;
+    } else {
+      // No explicit mention — check sticky session
+      const sticky = getStickyAgent(channel);
+      if (sticky) {
+        const agentConfig = getAgent(sticky);
+        const prefix = agentConfig ? `${agentConfig.emoji} **${agentConfig.name}**: ` : "";
+        callback("", false);
+        try {
+          const response = await agentDispatch(sticky, mention.text);
+          const attributed = `${prefix}${response}`;
+          callback(attributed, true);
+          try { logMessage("out", sourceLabel, attributed); } catch { /* best-effort */ }
+          try { logConversation("user", prompt, sourceLabel); } catch { /* best-effort */ }
+          try { logConversation("assistant", attributed, sourceLabel); } catch { /* best-effort */ }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          callback(`Error from @${sticky}: ${msg}`, true);
+        }
+        return;
+      }
+    }
+  }
+
+  // --- Standard orchestrator flow ---
   // Tag the prompt with its source channel
   const taggedPrompt = source.type === "background"
     ? prompt
