@@ -9,6 +9,8 @@ import { config, persistModel } from "../config.js";
 import { SESSIONS_DIR } from "../paths.js";
 import { getCurrentSourceChannel, switchSessionModel } from "./orchestrator.js";
 import { getRouterConfig, updateRouterConfig } from "./router.js";
+import { dispatch, chain, getAgentStatus, getAllAgentStatuses, type ChainStep } from "../agents/bus.js";
+import { listAgents } from "../agents/registry.js";
 
 function isTimeoutError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
@@ -534,6 +536,81 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
         return removed
           ? `Memory #${args.memory_id} forgotten.`
           : `Memory #${args.memory_id} not found — it may have already been removed.`;
+      },
+    }),
+
+    defineTool("delegate_to_agent", {
+      description:
+        "Delegate a task to a specialist agent. The agent will process the prompt and return a response. " +
+        "Available specialists: " + listAgents().map((a) => `${a.emoji} ${a.name} (@${a.slug})`).join(", ") + ". " +
+        "Use when a message matches a specialist's domain. The specialist has its own persistent " +
+        "memory, system prompt, and preferred model. Returns the specialist's response.",
+      parameters: z.object({
+        agent: z.string().describe("The agent slug (e.g. 'designer', 'coder', 'researcher', 'legal')"),
+        prompt: z.string().describe("The prompt to send to the specialist"),
+      }),
+      handler: async (args) => {
+        try {
+          const response = await dispatch(args.agent, args.prompt);
+          const agentConfig = listAgents().find((a) => a.slug === args.agent);
+          const prefix = agentConfig ? `${agentConfig.emoji} **${agentConfig.name}**: ` : "";
+          return `${prefix}${response}`;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return `Agent '${args.agent}' failed: ${msg}`;
+        }
+      },
+    }),
+
+    defineTool("chain_agents", {
+      description:
+        "Execute a multi-step pipeline across specialist agents. Each step's output is passed " +
+        "to the next step via the {{prev}} placeholder in the prompt. Use for workflows that " +
+        "require multiple specialists (e.g. Legal drafts → Designer formats).",
+      parameters: z.object({
+        steps: z.array(z.object({
+          agent: z.string().describe("Agent slug for this step"),
+          prompt: z.string().describe("Prompt for this step. Use {{prev}} to reference the previous step's output."),
+        })).min(2).describe("Ordered list of agent steps to execute"),
+      }),
+      handler: async (args) => {
+        try {
+          const result = await chain(args.steps as ChainStep[]);
+          return result;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return `Chain failed: ${msg}`;
+        }
+      },
+    }),
+
+    defineTool("check_agent_status", {
+      description:
+        "Check the status of specialist agents. Shows session state (running/idle/error/not_spawned), " +
+        "last activity, current task, errors, and memory count. Use when monitoring agent health " +
+        "or when the user asks about agent status. Pass a specific agent slug or omit for all agents.",
+      parameters: z.object({
+        agent: z.string().optional().describe("Specific agent slug, or omit for all agents"),
+      }),
+      handler: async (args) => {
+        if (args.agent) {
+          const status = getAgentStatus(args.agent);
+          const age = status.lastActive
+            ? `${Math.round((Date.now() - status.lastActive) / 60_000)}min ago`
+            : "never";
+          const task = status.currentTask ? `\nCurrent task: ${status.currentTask}` : "";
+          const error = status.lastError ? `\nLast error: ${status.lastError}` : "";
+          return `${status.emoji} ${status.name}: ${status.status} (last active: ${age}, memories: ${status.memoryCount})${task}${error}`;
+        }
+        const statuses = getAllAgentStatuses();
+        if (statuses.length === 0) return "No specialist agents configured.";
+        const lines = statuses.map((s) => {
+          const age = s.lastActive
+            ? `${Math.round((Date.now() - s.lastActive) / 60_000)}min ago`
+            : "—";
+          return `${s.emoji} ${s.name} (@${s.slug}): ${s.status} | last: ${age} | memories: ${s.memoryCount}`;
+        });
+        return `Specialist agents:\n${lines.join("\n")}`;
       },
     }),
 
