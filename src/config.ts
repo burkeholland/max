@@ -13,6 +13,8 @@ const configSchema = z.object({
   API_PORT: z.string().optional(),
   COPILOT_MODEL: z.string().optional(),
   WORKER_TIMEOUT: z.string().optional(),
+  MAX_CONCURRENT_AGENTS: z.string().optional(),
+  AGENT_IDLE_TIMEOUT: z.string().optional(),
 });
 
 const raw = configSchema.parse(process.env);
@@ -38,6 +40,24 @@ if (!Number.isInteger(parsedWorkerTimeout) || parsedWorkerTimeout <= 0) {
   throw new Error(`WORKER_TIMEOUT must be a positive integer (ms), got: "${raw.WORKER_TIMEOUT}"`);
 }
 
+const DEFAULT_MAX_CONCURRENT_AGENTS = 5;
+const parsedMaxAgents = raw.MAX_CONCURRENT_AGENTS
+  ? Number(raw.MAX_CONCURRENT_AGENTS)
+  : DEFAULT_MAX_CONCURRENT_AGENTS;
+
+if (!Number.isInteger(parsedMaxAgents) || parsedMaxAgents < 1) {
+  throw new Error(`MAX_CONCURRENT_AGENTS must be a positive integer, got: "${raw.MAX_CONCURRENT_AGENTS}"`);
+}
+
+const DEFAULT_AGENT_IDLE_TIMEOUT_MS = 3_600_000; // 60 minutes
+const parsedAgentIdleTimeout = raw.AGENT_IDLE_TIMEOUT
+  ? Number(raw.AGENT_IDLE_TIMEOUT)
+  : DEFAULT_AGENT_IDLE_TIMEOUT_MS;
+
+if (!Number.isInteger(parsedAgentIdleTimeout) || parsedAgentIdleTimeout < 60_000) {
+  throw new Error(`AGENT_IDLE_TIMEOUT must be an integer ≥ 60000 (ms), got: "${raw.AGENT_IDLE_TIMEOUT}"`);
+}
+
 export const DEFAULT_MODEL = "claude-sonnet-4.6";
 
 let _copilotModel = raw.COPILOT_MODEL || DEFAULT_MODEL;
@@ -47,6 +67,8 @@ export const config = {
   authorizedUserId: parsedUserId,
   apiPort: parsedPort,
   workerTimeoutMs: parsedWorkerTimeout,
+  maxConcurrentAgents: parsedMaxAgents,
+  agentIdleTimeoutMs: parsedAgentIdleTimeout,
   get copilotModel(): string {
     return _copilotModel;
   },

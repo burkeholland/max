@@ -23,6 +23,9 @@ export const HISTORY_PATH = join(MAX_HOME, "tui_history");
 /** Path to optional TUI debug log */
 export const TUI_DEBUG_LOG_PATH = join(MAX_HOME, "tui-debug.log");
 
+/** Path to user-local agent definitions (~/.max/agents/) */
+export const AGENTS_DIR = join(MAX_HOME, "agents");
+
 /** Path to the API bearer token file */
 export const API_TOKEN_PATH = join(MAX_HOME, "api-token");
 
