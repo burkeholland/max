@@ -36,7 +36,7 @@ export function chunkMessage(text: string): string[] {
 /**
  * Escape special characters for Telegram MarkdownV2 plain text segments.
  */
-function escapeSegment(text: string): string {
+export function escapeSegment(text: string): string {
   return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
 }
 
@@ -74,8 +74,8 @@ export function toTelegramMarkdown(text: string): string {
   let out = text;
 
   // Stash fenced code blocks
-  out = out.replace(/```([a-z]*)\n?([\s\S]*?)```/g, (_m, lang, code) =>
-    stashToken("```" + (lang || "") + "\n" + code.trim() + "\n```")
+  out = out.replace(/```([a-zA-Z0-9+#._-]*)\n?([\s\S]*?)```/g, (_m, lang, code) =>
+    stashToken("```" + lang.toLowerCase() + "\n" + code.trim() + "\n```")
   );
 
   // Stash inline code
@@ -107,12 +107,19 @@ export function toTelegramMarkdown(text: string): string {
     return `\x00ITALIC${italicParts.length - 1}\x00`;
   });
 
+  const strikeParts: string[] = [];
+  out = out.replace(/~~(.+?)~~/g, (_m, inner) => {
+    strikeParts.push(inner);
+    return `\x00STRIKE${strikeParts.length - 1}\x00`;
+  });
+
   // 6. Escape everything that remains
   out = escapeSegment(out);
 
   // 7. Restore bold and italic with escaped inner text
   out = out.replace(/\x00BOLD(\d+)\x00/g, (_m, i) => `*${escapeSegment(boldParts[+i])}*`);
   out = out.replace(/\x00ITALIC(\d+)\x00/g, (_m, i) => `_${escapeSegment(italicParts[+i])}_`);
+  out = out.replace(/\x00STRIKE(\d+)\x00/g, (_m, i) => `~${escapeSegment(strikeParts[+i])}~`);
 
   // 8. Restore stashed code blocks/inline code
   out = out.replace(/\x00STASH(\d+)\x00/g, (_m, i) => stash[+i]);
