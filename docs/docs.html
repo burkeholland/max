@@ -603,26 +603,29 @@
 
 <h2 id="memory">Memory<span>.</span></h2>
 
-<p>Max has a three-layer memory system:</p>
+<p>Max has a wiki-based memory system that stores knowledge as interlinked markdown pages.</p>
 
-<h3>Layer 1: Persistent session</h3>
-<p>Max maintains a single long-running orchestrator session using the Copilot SDK's <strong>infinite sessions</strong>. The SDK automatically compacts context in the background when it fills up, preserving important information. This means Max naturally remembers your conversation across messages — no manual history injection needed.</p>
+<h3>Wiki knowledge base</h3>
+<p>Max maintains a personal wiki at <code>~/.max/wiki/</code> — a living knowledge base that grows with every conversation. Preferences, people, projects, routines — organized into searchable markdown pages with frontmatter, automatically indexed, and injected into context.</p>
 
-<h3>Layer 2: Long-term memory (SQLite)</h3>
-<p>For facts that should survive even a full session reset, Max has a <code>memories</code> table in SQLite. Things like your preferences, project context, people you work with, and routines. These are injected into Max's system prompt so he always has access.</p>
-
-<p>Max saves memories two ways:</p>
+<p>Max saves knowledge two ways:</p>
 <ul>
-  <li><strong>Explicitly</strong> — when you say "remember that I prefer TypeScript" or "remember that Sarah is my manager"</li>
+  <li><strong>Explicitly</strong> — when you say "remember that I prefer TypeScript" or "remember that Sarah is my manager", Max uses the <code>remember</code> tool to save a quick fact to the wiki</li>
   <li><strong>Proactively</strong> — Max automatically saves important facts he picks up in conversation</li>
 </ul>
 
-<p>Memory categories: <code>preference</code>, <code>fact</code>, <code>project</code>, <code>person</code>, <code>routine</code></p>
+<p>For structured, longer-form knowledge, Max uses <code>wiki_update</code> to create or edit full pages. You can also ask Max to search his wiki (<code>wiki_search</code>), read specific pages (<code>wiki_read</code>), or ingest external content like URLs or documents (<code>wiki_ingest</code>).</p>
 
-<p>Use <code>/memory</code> to see everything Max has remembered. Ask Max to <em>"forget #42"</em> to remove a specific memory.</p>
+<p>Use <code>/memory</code> to see everything Max has stored. Ask Max to <em>"forget that"</em> to remove specific content from a wiki page.</p>
 
-<h3>Layer 3: Conversation log</h3>
+<h3>Persistent session</h3>
+<p>Max maintains a single long-running orchestrator session using the Copilot SDK's <strong>infinite sessions</strong>. The SDK automatically compacts context in the background when it fills up, preserving important information. This means Max naturally remembers your conversation across messages — no manual history injection needed.</p>
+
+<h3>Conversation log</h3>
 <p>All messages are logged to SQLite with their source channel (Telegram, TUI, background). This provides cross-channel awareness — if you tell Max something on Telegram, the TUI session knows about it too.</p>
+
+<h3>Migration from SQLite</h3>
+<p>If you're upgrading from an older version that used SQLite-based memories, Max automatically migrates your existing memories into wiki pages on first launch. No action needed.</p>
 
 
 <h2 id="models">Models<span>.</span></h2>

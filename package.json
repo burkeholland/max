@@ -1,6 +1,6 @@
 {
   "name": "heymax",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Max — a personal AI assistant for developers, built on the GitHub Copilot SDK",
   "bin": {
     "max": "dist/cli.js"
