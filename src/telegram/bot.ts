@@ -1,7 +1,7 @@
 import { Bot, type Context } from "grammy";
 import { config, persistModel } from "../config.js";
 import { sendToOrchestrator, cancelCurrentMessage, getWorkers, getLastRouteResult } from "../copilot/orchestrator.js";
-import { chunkMessage, toTelegramMarkdown } from "./formatter.js";
+import { chunkMessage, toTelegramMarkdown, escapeSegment } from "./formatter.js";
 import { searchMemories } from "../store/db.js";
 import { listSkills } from "../copilot/skills.js";
 import { restartDaemon } from "../daemon.js";
@@ -246,7 +246,7 @@ export function createBot(): Bot {
             const routeResult = getLastRouteResult();
             let indicatorSuffix = "";
             if (routeResult && routeResult.routerMode === "auto") {
-              indicatorSuffix = `\n\n_⚡ auto · ${routeResult.model}_`;
+              indicatorSuffix = `\n\n_⚡ auto · ${escapeSegment(routeResult.model)}_`;
             }
             const formatted = toTelegramMarkdown(text) + indicatorSuffix;
             const chunks = chunkMessage(formatted);
@@ -258,9 +258,11 @@ export function createBot(): Bot {
               const opts = isFirst
                 ? { parse_mode: "MarkdownV2" as const, reply_parameters: replyParams }
                 : { parse_mode: "MarkdownV2" as const };
-              await ctx.reply(chunk, opts).catch(
-                () => ctx.reply(fallback, isFirst ? { reply_parameters: replyParams } : {})
-              );
+              await ctx.reply(chunk, opts).catch((err) => {
+                console.error("[max] MarkdownV2 parse failed:", err?.description ?? err);
+                console.error("[max] Offending chunk:\n", chunk);
+                return ctx.reply(fallback, isFirst ? { reply_parameters: replyParams } : {});
+              });
             };
             try {
               for (let i = 0; i < chunks.length; i++) {
