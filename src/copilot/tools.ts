@@ -7,11 +7,15 @@ import { homedir } from "os";
 import { listSkills, createSkill, removeSkill } from "./skills.js";
 import { config, persistModel } from "../config.js";
 import { SESSIONS_DIR } from "../paths.js";
-import { getCurrentSourceChannel, switchSessionModel } from "./orchestrator.js";
+import { getCurrentSourceChannel, switchSessionModel, destroyAgentSession, setActiveAgent } from "./orchestrator.js";
 import { getRouterConfig, updateRouterConfig } from "./router.js";
 import { ensureWikiStructure, readPage, writePage, deletePage, listPages, writeRawSource, listSources, getWikiDir } from "../wiki/fs.js";
 import { searchIndex, addToIndex, removeFromIndex, parseIndex, type IndexEntry } from "../wiki/index-manager.js";
 import { appendLog } from "../wiki/log-manager.js";
+import {
+  listAgentDefinitions, getAgent, createAgentFile, removeAgentFile, invalidateAgentCache,
+  agentRemember, agentRecall, type AgentDefinition,
+} from "./agents.js";
 
 function isTimeoutError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
@@ -808,6 +812,147 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
       },
     }),
 
+    // ----- Agent tools (orchestrator-facing) -----
+
+    defineTool("delegate_to_agent", {
+      description:
+        "Delegate a task to a specialist agent. The agent runs as a background worker with its own " +
+        "model, system message, and expertise. Returns immediately — you'll get results via a " +
+        "background completion message. Use when a task clearly falls within an agent's specialty.",
+      parameters: z.object({
+        agent: z.string().describe("Agent name or slug (e.g. 'coder', 'designer', 'researcher')"),
+        task: z.string().describe("The task to delegate — be specific about what you want done"),
+        working_dir: z.string().optional().describe("Optional working directory for the agent (absolute path)"),
+      }),
+      handler: async (args) => {
+        const agentDef = getAgent(args.agent);
+        if (!agentDef) {
+          const available = listAgentDefinitions().map((a) => a.slug).join(", ");
+          return `No agent named '${args.agent}'. Available: ${available || "(none)"}. Use hire_agent to create one.`;
+        }
+
+        if (deps.workers.size >= MAX_CONCURRENT_WORKERS) {
+          const names = Array.from(deps.workers.keys()).join(", ");
+          return `Worker limit reached (${MAX_CONCURRENT_WORKERS}). Active: ${names}. Kill a session first.`;
+        }
+
+        const workerName = `${agentDef.slug}-${Date.now().toString(36)}`;
+        const workingDir = args.working_dir ? resolve(args.working_dir) : resolve(".");
+
+        // Validate working directory
+        const home = homedir();
+        for (const blocked of BLOCKED_WORKER_DIRS) {
+          const blockedPath = join(home, blocked);
+          if (workingDir === blockedPath || workingDir.startsWith(blockedPath + sep)) {
+            return `Refused: '${workingDir}' is a sensitive directory.`;
+          }
+        }
+
+        // Inject agent's wiki notes into the system message for context
+        const agentNotes = agentRecall(agentDef.slug);
+        const notesBlock = agentNotes !== "No notes yet."
+          ? `\n\n## Your Notes\n${agentNotes}`
+          : "";
+
+        const agentTools = createAgentTools({ agentSlug: agentDef.slug, client: deps.client });
+        const session = await deps.client.createSession({
+          model: agentDef.model || config.copilotModel,
+          configDir: SESSIONS_DIR,
+          workingDirectory: workingDir,
+          systemMessage: { content: agentDef.systemMessage + notesBlock },
+          tools: agentTools,
+          onPermissionRequest: approveAll,
+        });
+
+        const worker: WorkerInfo = {
+          name: workerName,
+          session,
+          workingDir: workingDir,
+          status: "running",
+          startedAt: Date.now(),
+          originChannel: getCurrentSourceChannel(),
+        };
+        deps.workers.set(workerName, worker);
+
+        const db = getDb();
+        db.prepare(
+          `INSERT OR REPLACE INTO worker_sessions (name, copilot_session_id, working_dir, status)
+           VALUES (?, ?, ?, 'running')`
+        ).run(workerName, session.sessionId, workingDir);
+
+        const timeoutMs = config.workerTimeoutMs;
+        session.sendAndWait({
+          prompt: `Working directory: ${workingDir}\n\n${args.task}`,
+        }, timeoutMs).then((result) => {
+          worker.lastOutput = result?.data?.content || "No response";
+          deps.onWorkerComplete(workerName, `[Agent @${agentDef.slug}] ${worker.lastOutput}`);
+        }).catch((err) => {
+          const errMsg = formatWorkerError(workerName, worker.startedAt!, timeoutMs, err);
+          worker.lastOutput = errMsg;
+          deps.onWorkerComplete(workerName, `[Agent @${agentDef.slug}] ${errMsg}`);
+        }).finally(() => {
+          session.destroy().catch(() => {});
+          deps.workers.delete(workerName);
+          getDb().prepare(`DELETE FROM worker_sessions WHERE name = ?`).run(workerName);
+        });
+
+        return `Delegated to @${agentDef.slug} (worker: ${workerName}). I'll notify you when it's done.`;
+      },
+    }),
+
+    defineTool("list_agents", {
+      description:
+        "List all available specialist agents. Shows their name, description, and preferred model. " +
+        "Use when the user asks about available agents or when you need to decide who to delegate to.",
+      parameters: z.object({}),
+      handler: async () => {
+        const agents = listAgentDefinitions();
+        if (agents.length === 0) {
+          return "No specialist agents available. Use hire_agent to create one.";
+        }
+        const lines = agents.map(
+          (a) => `• @${a.slug} — ${a.name}: ${a.description}${a.model ? ` (model: ${a.model})` : ""}`,
+        );
+        return `Available agents (${agents.length}):\n${lines.join("\n")}`;
+      },
+    }),
+
+    defineTool("hire_agent", {
+      description:
+        "Create a new specialist agent. Requires a slug (lowercase kebab-case identifier), " +
+        "display name, description of expertise, preferred model, and system message " +
+        "instructions. The agent becomes available immediately.",
+      parameters: z.object({
+        slug: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).describe("Short kebab-case identifier (e.g. 'legal-expert', 'devops')"),
+        name: z.string().describe("Display name (e.g. 'Legal Expert', 'DevOps Engineer')"),
+        description: z.string().describe("One-line description of the agent's expertise"),
+        model: z.string().describe("Preferred model ID (e.g. 'claude-sonnet-4.6', 'gpt-4.1')"),
+        system_message: z.string().describe("System message / instructions for the agent — defines its personality, expertise, and working style"),
+      }),
+      handler: async (args) => {
+        const result = createAgentFile(args.slug, args.name, args.description, args.model, args.system_message);
+        return result.message;
+      },
+    }),
+
+    defineTool("fire_agent", {
+      description:
+        "Remove a specialist agent. Deletes the agent definition and its wiki/notes. " +
+        "Use when an agent is no longer needed.",
+      parameters: z.object({
+        slug: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).describe("The agent slug to remove (e.g. 'legal-expert')"),
+      }),
+      handler: async (args) => {
+        // Tear down live session and clear sticky routing before removing files
+        destroyAgentSession(args.slug);
+        setActiveAgent("tui", null);
+        setActiveAgent("telegram", null);
+        setActiveAgent("default", null);
+        const result = removeAgentFile(args.slug);
+        return result.message;
+      },
+    }),
+
     defineTool("restart_max", {
       description:
         "Restart the Max daemon process. Use when the user asks Max to restart himself, " +
@@ -827,6 +972,110 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
           });
         }, 1000);
         return `Restarting Max${reason}. I'll be back in a few seconds.`;
+      },
+    }),
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// Agent-facing tools (given to agent sessions, not the orchestrator)
+// ---------------------------------------------------------------------------
+
+export interface AgentToolDeps {
+  /** The agent this tool set belongs to */
+  agentSlug: string;
+  /** Copilot client for creating temporary sessions */
+  client: CopilotClient;
+}
+
+/**
+ * Create tools for an agent session. Agents get:
+ * - ask_agent: communicate with other agents
+ * - remember: save notes to their private wiki
+ * - recall: search their private wiki
+ */
+export function createAgentTools(deps: AgentToolDeps): Tool<any>[] {
+  return [
+    defineTool("ask_agent", {
+      description:
+        "Ask another specialist agent a question. Use this when you need information or expertise " +
+        "from a different domain. The other agent will process your question using their own " +
+        "context and knowledge, and send back a response. This is synchronous — you'll wait for the answer.",
+      parameters: z.object({
+        agent: z.string().describe("The agent slug to ask (e.g. 'coder', 'designer', 'researcher')"),
+        question: z.string().describe("Your question for the other agent"),
+      }),
+      handler: async (args) => {
+        if (args.agent.toLowerCase() === deps.agentSlug) {
+          return "You can't ask yourself a question. Just think about it.";
+        }
+
+        const targetAgent = getAgent(args.agent);
+        if (!targetAgent) {
+          const available = listAgentDefinitions()
+            .filter((a) => a.slug !== deps.agentSlug)
+            .map((a) => a.slug)
+            .join(", ");
+          return `No agent named '${args.agent}'. Available: ${available || "(none)"}`;
+        }
+
+        // Inject target agent's wiki notes for context
+        const targetNotes = agentRecall(targetAgent.slug);
+        const notesBlock = targetNotes !== "No notes yet."
+          ? `\n\n## Your Notes\n${targetNotes}`
+          : "";
+
+        let tempSession: CopilotSession | undefined;
+        try {
+          // Create a temporary session with the target agent's config
+          tempSession = await deps.client.createSession({
+            model: targetAgent.model || "claude-sonnet-4.6",
+            configDir: SESSIONS_DIR,
+            streaming: false,
+            systemMessage: {
+              content: targetAgent.systemMessage + notesBlock +
+                `\n\nAnother agent (@${deps.agentSlug}) is asking you a question. Answer based on your expertise. Be concise and helpful.`,
+            },
+            onPermissionRequest: approveAll,
+          });
+
+          const result = await tempSession.sendAndWait(
+            { prompt: args.question },
+            30_000, // 30s timeout for inter-agent communication
+          );
+
+          return result?.data?.content || "No response from agent.";
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return `Failed to reach @${targetAgent.slug}: ${msg}`;
+        } finally {
+          tempSession?.destroy().catch(() => {});
+        }
+      },
+    }),
+
+    defineTool("remember", {
+      description:
+        "Save a note to your private memory. Use when you learn something important about your domain " +
+        "that you want to remember for future tasks. Notes persist across conversations.",
+      parameters: z.object({
+        content: z.string().describe("The thing to remember — a concise, self-contained statement"),
+      }),
+      handler: async (args) => {
+        agentRemember(deps.agentSlug, args.content);
+        return `Remembered: "${args.content}"`;
+      },
+    }),
+
+    defineTool("recall", {
+      description:
+        "Search your private memory for stored notes. Use when you need to look up something " +
+        "you've saved before.",
+      parameters: z.object({
+        query: z.string().optional().describe("Search term (returns all notes if omitted)"),
+      }),
+      handler: async (args) => {
+        return agentRecall(deps.agentSlug, args.query);
       },
     }),
   ];

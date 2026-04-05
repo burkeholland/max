@@ -39,6 +39,19 @@ const C = {
 // ── Layout constants ─────────────────────────────────────
 const LABEL_PAD = "          "; // 10-char indent for continuation lines
 const MAX_LABEL = `  ${C.cyan("MAX")}     `;
+let activeAgentSlug: string | null = null;
+
+function getResponseLabel(): string {
+  if (activeAgentSlug) {
+    // Truncate to fit 10-char visual width: 2 prefix + name + padding
+    const raw = activeAgentSlug.toUpperCase();
+    const name = raw.length > 7 ? raw.slice(0, 6) + "…" : raw;
+    const padded = `  ${C.magenta(name)}${" ".repeat(Math.max(1, 8 - name.length))}`;
+    return padded;
+  }
+  return MAX_LABEL;
+}
+
 const TUI_DEBUG_ENABLED = /^(1|true|yes|on)$/i.test((process.env.MAX_TUI_DEBUG || "").trim());
 let debugWriteFailureReported = false;
 
@@ -178,7 +191,7 @@ function renderMarkdown(text: string): string {
 /** Write a rendered message with a role label (MAX/SYS). */
 function writeLabeled(role: "max" | "sys", text: string): void {
   const label = role === "max"
-    ? MAX_LABEL
+    ? getResponseLabel()
     : `  ${C.dim("SYS")}     `;
   const availWidth = (process.stdout.columns || 80) - 10;
   const lines = text.split("\n");
@@ -201,7 +214,7 @@ let streamIsFirstLine = true;
 
 /** Get the prefix for the current stream line (label or padding). */
 function streamPrefix(): string {
-  return streamIsFirstLine ? MAX_LABEL : LABEL_PAD;
+  return streamIsFirstLine ? getResponseLabel() : LABEL_PAD;
 }
 
 function stripLeadingStreamNewlines(text: string): string {
@@ -318,7 +331,8 @@ function startThinking(): void {
   stopThinking("restart-thinking");
   thinkingFrame = 0;
   thinkingVisible = true;
-  process.stdout.write(`\n${MAX_LABEL}${C.dim(thinkingFrames[0])}`);
+  const label = getResponseLabel();
+  process.stdout.write(`\n${label}${C.dim(thinkingFrames[0])}`);
   debugLog("thinking-start", {
     requestId: activeRequestId,
     frame: thinkingFrames[0],
@@ -326,7 +340,7 @@ function startThinking(): void {
   });
   thinkingTimer = setInterval(() => {
     thinkingFrame = (thinkingFrame + 1) % thinkingFrames.length;
-    process.stdout.write(`\r\x1b[K${MAX_LABEL}${C.dim(thinkingFrames[thinkingFrame])}`);
+    process.stdout.write(`\r\x1b[K${getResponseLabel()}${C.dim(thinkingFrames[thinkingFrame])}`);
     debugLog("thinking-tick", {
       requestId: activeRequestId,
       frameIndex: thinkingFrame,
@@ -523,6 +537,14 @@ function connectSSE(): void {
                 isStreaming,
                 contentLength: typeof event.content === "string" ? event.content.length : 0,
               });
+
+              // Track active agent for prompt label changes
+              if ("activeAgent" in event) {
+                activeAgentSlug = event.activeAgent || null;
+              } else {
+                activeAgentSlug = null;
+              }
+
               if (isStreaming) {
                 // Streaming is done — flush remaining and re-prompt
                 flushStreamState();
@@ -535,6 +557,8 @@ function connectSSE(): void {
                     ? `⚡ auto · ${r.model} (${r.overrideName})`
                     : `⚡ auto · ${r.model}`;
                   process.stdout.write(`\n${LABEL_PAD}${C.dim(label)}`);
+                } else if (activeAgentSlug) {
+                  process.stdout.write(`\n${LABEL_PAD}${C.dim(`🤖 @${activeAgentSlug}`)}`);
                 }
                 process.stdout.write("\n\n\n");
               } else {
@@ -875,6 +899,29 @@ function cmdAuto(): void {
   });
 }
 
+function cmdAgents(): void {
+  apiGet("/agents", (data: any) => {
+    const agents = data?.agents;
+    if (!agents || agents.length === 0) {
+      console.log(C.dim("\n    No specialist agents available.\n"));
+      return;
+    }
+    console.log();
+    console.log(C.boldWhite("    AGENTS"));
+    console.log();
+    for (const agent of agents) {
+      const active = data.activeAgent === agent.slug ? C.green(" ← active") : "";
+      console.log(`    ${C.magenta(`@${agent.slug}`)}  ${agent.name} — ${C.dim(agent.description)}${active}`);
+      if (agent.model) {
+        console.log(`    ${LABEL_PAD}${C.dim(`model: ${agent.model}`)}`);
+      }
+    }
+    console.log();
+    console.log(C.dim("    type @agent to talk directly, @max to return"));
+    console.log();
+  });
+}
+
 function cmdHelp(): void {
   console.log();
   console.log(C.boldWhite("    COMMANDS"));
@@ -884,6 +931,7 @@ function cmdHelp(): void {
   console.log(`    ${C.coral("/auto")}                 toggle auto model routing`);
   console.log(`    ${C.coral("/memory")}               show stored memories`);
   console.log(`    ${C.coral("/skills")}               list installed skills`);
+  console.log(`    ${C.coral("/agents")}               list specialist agents`);
   console.log(`    ${C.coral("/workers")}              list active sessions`);
   console.log(`    ${C.coral("/copy")}                 copy last response`);
   console.log(`    ${C.coral("/status")}               daemon health check`);
@@ -891,6 +939,8 @@ function cmdHelp(): void {
   console.log(`    ${C.coral("/clear")}                clear screen`);
   console.log(`    ${C.coral("/quit")}                 exit`);
   console.log();
+  console.log(C.dim("    @agent to talk to a specialist (e.g. @designer, @coder)"));
+  console.log(C.dim("    @max to return to Max"));
   console.log(C.dim("    press escape to cancel a running response"));
   console.log(C.dim("    set MAX_TUI_DEBUG=1 to write lifecycle logs to ~/.max/tui-debug.log"));
   console.log();
@@ -977,6 +1027,7 @@ setTimeout(() => {
     if (trimmed === "/auto") { cmdAuto(); return; }
     if (trimmed === "/memory") { cmdMemory(); return; }
     if (trimmed === "/skills") { cmdSkills(); return; }
+    if (trimmed === "/agents") { cmdAgents(); return; }
     if (trimmed === "/help") { cmdHelp(); return; }
 
     if (trimmed === "/status") {

@@ -35,6 +35,9 @@ export const WIKI_PAGES_DIR = join(WIKI_DIR, "pages");
 /** Raw ingested source documents (immutable) */
 export const WIKI_SOURCES_DIR = join(WIKI_DIR, "sources");
 
+/** Directory for agent definitions (~/.max/agents/) */
+export const AGENTS_DIR = join(MAX_HOME, "agents");
+
 /** Ensure ~/.max/ exists */
 export function ensureMaxHome(): void {
   mkdirSync(MAX_HOME, { recursive: true });

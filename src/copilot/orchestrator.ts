@@ -1,5 +1,5 @@
 import { approveAll, type CopilotClient, type CopilotSession } from "@github/copilot-sdk";
-import { createTools, type WorkerInfo } from "./tools.js";
+import { createTools, createAgentTools, type WorkerInfo } from "./tools.js";
 import { getOrchestratorSystemMessage } from "./system-message.js";
 import { config, DEFAULT_MODEL } from "../config.js";
 import { loadMcpConfig } from "./mcp-config.js";
@@ -9,6 +9,7 @@ import { logConversation, getState, setState, deleteState, getRecentConversation
 import { SESSIONS_DIR } from "../paths.js";
 import { resolveModel, type Tier, type RouteResult } from "./router.js";
 import { getRelevantWikiContext, getWikiSummary } from "../wiki/context.js";
+import { loadAgents, getAgent, ensureDefaultAgents, getAgentRoster, agentRecall, type AgentDefinition } from "./agents.js";
 
 const MAX_RETRIES = 3;
 const RECONNECT_DELAYS_MS = [1_000, 3_000, 10_000];
@@ -51,6 +52,30 @@ export function getLastRouteResult(): RouteResult | undefined {
   return lastRouteResult;
 }
 
+// ---------------------------------------------------------------------------
+// Agent state
+// ---------------------------------------------------------------------------
+
+/** Persistent sessions per agent (keyed by slug). */
+const agentSessions = new Map<string, CopilotSession>();
+
+/** Sticky routing: which agent is active per channel. null = orchestrator. */
+const activeAgentByChannel = new Map<string, string>();
+
+/** Get which agent is active for a channel (or null for orchestrator). */
+export function getActiveAgent(channel: string): string | null {
+  return activeAgentByChannel.get(channel) ?? null;
+}
+
+/** Set the active agent for a channel. */
+export function setActiveAgent(channel: string, agentSlug: string | null): void {
+  if (agentSlug) {
+    activeAgentByChannel.set(channel, agentSlug);
+  } else {
+    activeAgentByChannel.delete(channel);
+  }
+}
+
 // Persistent orchestrator session
 let orchestratorSession: CopilotSession | undefined;
 // Coalesces concurrent ensureOrchestratorSession calls
@@ -68,6 +93,8 @@ type QueuedMessage = {
 const messageQueue: QueuedMessage[] = [];
 let processing = false;
 let currentCallback: MessageCallback | undefined;
+/** The session currently executing a request (orchestrator or agent). */
+let currentActiveSession: CopilotSession | undefined;
 /** The channel currently being processed — tools use this to tag new workers. */
 let currentSourceChannel: "telegram" | "tui" | undefined;
 
@@ -165,6 +192,12 @@ async function createOrResumeSession(): Promise<CopilotSession> {
   const client = await ensureClient();
   const { tools, mcpServers, skillDirectories } = getSessionConfig();
   const wikiSummary = getWikiSummary();
+  const agentRoster = getAgentRoster();
+
+  const systemMessageOpts = {
+    selfEditEnabled: config.selfEditEnabled,
+    agentRoster: agentRoster || undefined,
+  };
 
   const infiniteSessions = {
     enabled: true,
@@ -182,7 +215,7 @@ async function createOrResumeSession(): Promise<CopilotSession> {
         configDir: SESSIONS_DIR,
         streaming: true,
         systemMessage: {
-          content: getOrchestratorSystemMessage(wikiSummary || undefined, { selfEditEnabled: config.selfEditEnabled }),
+          content: getOrchestratorSystemMessage(wikiSummary || undefined, systemMessageOpts),
         },
         tools,
         mcpServers,
@@ -206,7 +239,7 @@ async function createOrResumeSession(): Promise<CopilotSession> {
     configDir: SESSIONS_DIR,
     streaming: true,
     systemMessage: {
-      content: getOrchestratorSystemMessage(wikiSummary || undefined, { selfEditEnabled: config.selfEditEnabled }),
+      content: getOrchestratorSystemMessage(wikiSummary || undefined, systemMessageOpts),
     },
     tools,
     mcpServers,
@@ -267,6 +300,11 @@ export async function initOrchestrator(client: CopilotClient): Promise<void> {
   console.log(`[max] Persistent session mode — conversation history maintained by SDK`);
   startHealthCheck();
 
+  // Initialize agent system
+  ensureDefaultAgents();
+  const agents = loadAgents();
+  console.log(`[max] Loaded ${agents.length} agent(s): ${agents.map((a) => `@${a.slug}`).join(", ") || "(none)"}`);
+
   // Run memory maintenance on startup (best-effort)
   try {
     const { deduped, pruned, capped } = runMemoryMaintenance();
@@ -285,6 +323,147 @@ export async function initOrchestrator(client: CopilotClient): Promise<void> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Agent session management
+// ---------------------------------------------------------------------------
+
+const AGENT_SESSION_PREFIX = "agent_session_";
+
+/** Create or resume a persistent session for a named agent. */
+async function ensureAgentSession(agentDef: AgentDefinition): Promise<CopilotSession> {
+  const existing = agentSessions.get(agentDef.slug);
+  if (existing) return existing;
+
+  const client = await ensureClient();
+
+  // Inject agent's wiki notes for context
+  const agentNotes = agentRecall(agentDef.slug);
+  const notesBlock = agentNotes !== "No notes yet."
+    ? `\n\n## Your Notes\n${agentNotes}`
+    : "";
+
+  const agentTools = createAgentTools({
+    agentSlug: agentDef.slug,
+    client,
+  });
+
+  // Try to resume a saved agent session
+  const savedId = getState(AGENT_SESSION_PREFIX + agentDef.slug);
+  if (savedId) {
+    try {
+      console.log(`[max] Resuming @${agentDef.slug} session ${savedId.slice(0, 8)}…`);
+      const session = await client.resumeSession(savedId, {
+        model: agentDef.model || config.copilotModel,
+        configDir: SESSIONS_DIR,
+        streaming: true,
+        systemMessage: { content: agentDef.systemMessage + notesBlock },
+        tools: agentTools,
+        onPermissionRequest: approveAll,
+        infiniteSessions: {
+          enabled: true,
+          backgroundCompactionThreshold: 0.80,
+          bufferExhaustionThreshold: 0.95,
+        },
+      });
+      agentSessions.set(agentDef.slug, session);
+      console.log(`[max] Resumed @${agentDef.slug} session`);
+      return session;
+    } catch (err) {
+      console.log(`[max] Could not resume @${agentDef.slug} session: ${err instanceof Error ? err.message : err}. Creating new.`);
+      deleteState(AGENT_SESSION_PREFIX + agentDef.slug);
+    }
+  }
+
+  // Create a fresh session
+  console.log(`[max] Creating new session for @${agentDef.slug}`);
+  const session = await client.createSession({
+    model: agentDef.model || config.copilotModel,
+    configDir: SESSIONS_DIR,
+    streaming: true,
+    systemMessage: { content: agentDef.systemMessage + notesBlock },
+    tools: agentTools,
+    onPermissionRequest: approveAll,
+    infiniteSessions: {
+      enabled: true,
+      backgroundCompactionThreshold: 0.80,
+      bufferExhaustionThreshold: 0.95,
+    },
+  });
+
+  setState(AGENT_SESSION_PREFIX + agentDef.slug, session.sessionId);
+  agentSessions.set(agentDef.slug, session);
+  console.log(`[max] Created @${agentDef.slug} session ${session.sessionId.slice(0, 8)}…`);
+  return session;
+}
+
+/** Send a prompt to an agent's persistent session. */
+async function executeOnAgentSession(
+  agentDef: AgentDefinition,
+  prompt: string,
+  callback: MessageCallback,
+): Promise<string> {
+  const session = await ensureAgentSession(agentDef);
+  currentCallback = callback;
+  currentActiveSession = session;
+
+  let accumulated = "";
+  let toolCallExecuted = false;
+  const unsubToolDone = session.on("tool.execution_complete", () => {
+    toolCallExecuted = true;
+  });
+  const unsubDelta = session.on("assistant.message_delta", (event) => {
+    if (toolCallExecuted && accumulated.length > 0 && !accumulated.endsWith("\n")) {
+      accumulated += "\n";
+    }
+    toolCallExecuted = false;
+    accumulated += event.data.deltaContent;
+    callback(accumulated, false);
+  });
+
+  try {
+    const result = await session.sendAndWait(
+      { prompt },
+      300_000,
+    );
+    const finalContent = result?.data?.content || accumulated || "(No response)";
+    return finalContent;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/closed|destroy|disposed|invalid|expired|not found/i.test(msg)) {
+      console.log(`[max] @${agentDef.slug} session appears dead, will recreate: ${msg}`);
+      agentSessions.delete(agentDef.slug);
+      deleteState(AGENT_SESSION_PREFIX + agentDef.slug);
+    }
+    throw err;
+  } finally {
+    unsubDelta();
+    unsubToolDone();
+    currentCallback = undefined;
+    currentActiveSession = undefined;
+  }
+}
+
+/** Destroy an agent's persistent session (e.g., when firing an agent). */
+export function destroyAgentSession(slug: string): void {
+  const session = agentSessions.get(slug);
+  if (session) {
+    session.destroy().catch(() => {});
+    agentSessions.delete(slug);
+    deleteState(AGENT_SESSION_PREFIX + slug);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// @mention parsing
+// ---------------------------------------------------------------------------
+
+/** Parse an @mention at the start of a message. Returns { agent, rest } or null. */
+function parseAtMention(prompt: string): { agent: string; rest: string } | null {
+  const match = prompt.match(/^@(\w[\w-]*)\s*([\s\S]*)/);
+  if (!match) return null;
+  return { agent: match[1].toLowerCase(), rest: match[2].trim() };
+}
+
 /** Send a prompt on the persistent session, return the response. */
 async function executeOnSession(
   prompt: string,
@@ -293,6 +472,7 @@ async function executeOnSession(
 ): Promise<string> {
   const session = await ensureOrchestratorSession();
   currentCallback = callback;
+  currentActiveSession = session;
 
   // Inject relevant wiki context into the prompt (skip for background task results)
   let enrichedPrompt = prompt;
@@ -344,6 +524,7 @@ async function executeOnSession(
     unsubDelta();
     unsubToolDone();
     currentCallback = undefined;
+    currentActiveSession = undefined;
   }
 }
 
@@ -361,12 +542,71 @@ async function processQueue(): Promise<void> {
     const item = messageQueue.shift()!;
     currentSourceChannel = item.sourceChannel;
     try {
-      // Route the model before executing
+      // --- Agent routing: check for @mention or sticky agent ---
+      const channelKey = item.sourceChannel || "default";
+      const rawPrompt = item.prompt
+        .replace(/^\[via \w+\]\s*/i, "")
+        .trim();
+
+      const mention = parseAtMention(rawPrompt);
+
+      // @max → return to orchestrator
+      if (mention && mention.agent === "max") {
+        setActiveAgent(channelKey, null);
+        const prompt = mention.rest || "I'm back. What's up?";
+        // Tag it back for the orchestrator
+        const taggedBack = item.sourceChannel ? `[via ${item.sourceChannel}] ${prompt}` : prompt;
+        const routeResult = await resolveModel(taggedBack, currentSessionModel || config.copilotModel, recentTiers, copilotClient);
+        if (routeResult.switched && orchestratorSession) {
+          try {
+            config.copilotModel = routeResult.model;
+            await orchestratorSession.setModel(routeResult.model);
+            currentSessionModel = routeResult.model;
+          } catch { /* will apply next time */ }
+        }
+        lastRouteResult = { ...routeResult, activeAgent: null } as any;
+        const result = await executeOnSession(taggedBack, item.callback, item.attachments);
+        item.resolve(result);
+        currentSourceChannel = undefined;
+        continue;
+      }
+
+      // @agentname → switch to agent sticky session
+      if (mention) {
+        const agentDef = getAgent(mention.agent);
+        if (agentDef) {
+          setActiveAgent(channelKey, agentDef.slug);
+          console.log(`[max] @${agentDef.slug} activated (sticky) for ${channelKey}`);
+          const prompt = mention.rest || `Hello! I'm ready to help. What do you need?`;
+          lastRouteResult = { model: agentDef.model || config.copilotModel, tier: null, switched: false, routerMode: "agent", activeAgent: agentDef.slug } as any;
+          const result = await executeOnAgentSession(agentDef, prompt, item.callback);
+          item.resolve(result);
+          currentSourceChannel = undefined;
+          continue;
+        }
+        // Agent not found — fall through to orchestrator, but let the user know
+      }
+
+      // Check for sticky agent on this channel
+      const stickyAgent = getActiveAgent(channelKey);
+      if (stickyAgent) {
+        const agentDef = getAgent(stickyAgent);
+        if (agentDef) {
+          lastRouteResult = { model: agentDef.model || config.copilotModel, tier: null, switched: false, routerMode: "agent", activeAgent: agentDef.slug } as any;
+          const result = await executeOnAgentSession(agentDef, rawPrompt, item.callback);
+          item.resolve(result);
+          currentSourceChannel = undefined;
+          continue;
+        }
+        // Agent definition was removed — clear sticky
+        setActiveAgent(channelKey, null);
+      }
+
+      // --- Normal orchestrator routing ---
       const routeResult = await resolveModel(item.prompt, currentSessionModel || config.copilotModel, recentTiers, copilotClient);
       if (routeResult.switched) {
         console.log(`[max] Auto: switching to ${routeResult.model} (${routeResult.overrideName || routeResult.tier})`);
         config.copilotModel = routeResult.model;
-        // Use setModel() to switch in-place, preserving conversation history
         if (orchestratorSession) {
           try {
             await orchestratorSession.setModel(routeResult.model);
@@ -383,7 +623,7 @@ async function processQueue(): Promise<void> {
         recentTiers.push(routeResult.tier);
         if (recentTiers.length > 5) recentTiers = recentTiers.slice(-5);
       }
-      lastRouteResult = routeResult;
+      lastRouteResult = { ...routeResult, activeAgent: null } as any;
 
       const result = await executeOnSession(item.prompt, item.callback, item.attachments);
       item.resolve(result);
@@ -474,10 +714,10 @@ export async function cancelCurrentMessage(): Promise<boolean> {
     item.reject(new Error("Cancelled"));
   }
 
-  // Abort the active session request
-  if (orchestratorSession && currentCallback) {
+  // Abort the active session request (orchestrator or agent)
+  if (currentActiveSession && currentCallback) {
     try {
-      await orchestratorSession.abort();
+      await currentActiveSession.abort();
       console.log(`[max] Aborted in-flight request`);
       return true;
     } catch (err) {

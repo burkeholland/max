@@ -2,12 +2,13 @@ import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { randomBytes } from "crypto";
-import { sendToOrchestrator, getWorkers, cancelCurrentMessage, getLastRouteResult } from "../copilot/orchestrator.js";
+import { sendToOrchestrator, getWorkers, cancelCurrentMessage, getLastRouteResult, getActiveAgent } from "../copilot/orchestrator.js";
 import { sendPhoto } from "../telegram/bot.js";
 import { config, persistModel } from "../config.js";
 import { getRouterConfig, updateRouterConfig } from "../copilot/router.js";
 import { searchMemories } from "../store/db.js";
 import { listSkills, removeSkill } from "../copilot/skills.js";
+import { listAgentDefinitions } from "../copilot/agents.js";
 import { restartDaemon } from "../daemon.js";
 import { API_TOKEN_PATH, ensureMaxHome } from "../paths.js";
 
@@ -124,6 +125,11 @@ app.post("/message", (req: Request, res: Response) => {
               ...(routeResult.overrideName ? { overrideName: routeResult.overrideName } : {}),
             };
           }
+          // Include active agent info for TUI prompt updates
+          const activeAgent = getActiveAgent("tui");
+          if (activeAgent) {
+            event.activeAgent = activeAgent;
+          }
         }
         sseRes.write(`data: ${JSON.stringify(event)}\n\n`);
       }
@@ -237,6 +243,18 @@ app.delete("/skills/:slug", (req: Request, res: Response) => {
   } else {
     res.json({ ok: true, message: result.message });
   }
+});
+
+// List agents
+app.get("/agents", (_req: Request, res: Response) => {
+  const agents = listAgentDefinitions().map((a) => ({
+    slug: a.slug,
+    name: a.name,
+    description: a.description,
+    model: a.model,
+  }));
+  const activeAgent = getActiveAgent("tui");
+  res.json({ agents, activeAgent });
 });
 
 // Restart daemon
