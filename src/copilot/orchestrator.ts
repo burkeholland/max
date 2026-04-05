@@ -401,6 +401,7 @@ async function executeOnAgentSession(
   agentDef: AgentDefinition,
   prompt: string,
   callback: MessageCallback,
+  attachments?: Array<{ type: "file"; path: string; displayName?: string }>,
 ): Promise<string> {
   const session = await ensureAgentSession(agentDef);
   currentCallback = callback;
@@ -422,7 +423,7 @@ async function executeOnAgentSession(
 
   try {
     const result = await session.sendAndWait(
-      { prompt },
+      { prompt, ...(attachments && attachments.length > 0 ? { attachments } : {}) },
       300_000,
     );
     const finalContent = result?.data?.content || accumulated || "(No response)";
@@ -579,7 +580,7 @@ async function processQueue(): Promise<void> {
           console.log(`[max] @${agentDef.slug} activated (sticky) for ${channelKey}`);
           const prompt = mention.rest || `Hello! I'm ready to help. What do you need?`;
           lastRouteResult = { model: agentDef.model || config.copilotModel, tier: null, switched: false, routerMode: "agent", activeAgent: agentDef.slug } as any;
-          const result = await executeOnAgentSession(agentDef, prompt, item.callback);
+          const result = await executeOnAgentSession(agentDef, prompt, item.callback, item.attachments);
           item.resolve(result);
           currentSourceChannel = undefined;
           continue;
@@ -593,7 +594,7 @@ async function processQueue(): Promise<void> {
         const agentDef = getAgent(stickyAgent);
         if (agentDef) {
           lastRouteResult = { model: agentDef.model || config.copilotModel, tier: null, switched: false, routerMode: "agent", activeAgent: agentDef.slug } as any;
-          const result = await executeOnAgentSession(agentDef, rawPrompt, item.callback);
+          const result = await executeOnAgentSession(agentDef, rawPrompt, item.callback, item.attachments);
           item.resolve(result);
           currentSourceChannel = undefined;
           continue;
