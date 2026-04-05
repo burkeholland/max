@@ -925,6 +925,9 @@
         <div class="tui-msg"><span class="tui-who max">max</span><span class="tui-text">Let me look into that... found <code>python-kasa</code> — it can control TP-Link smart devices.</span></div>
         <div class="tui-msg"><span class="tui-who sys">sys</span><span class="tui-text">Skill <code>kasa-lights</code> created ✓</span></div>
         <div class="tui-msg"><span class="tui-who max">max</span><span class="tui-text"><strong>Done.</strong> I can now control your lights. Want me to turn them off?</span></div>
+        <div class="tui-divider"></div>
+        <div class="tui-msg"><span class="tui-who you">you</span><span class="tui-text">Remember that I deploy myapp to Vercel</span></div>
+        <div class="tui-msg"><span class="tui-who max">max</span><span class="tui-text">Got it — saved to my wiki under Projects. I'll keep that in mind for future deploys.</span></div>
       </div>
       <div class="tui-inputbar">
         <span class="tui-prompt">›</span>
@@ -965,19 +968,26 @@
     <div class="what-item fade-in">
       <span class="what-item-number">04</span>
       <div class="what-item-content">
+        <h3>Remembers everything</h3>
+        <p><strong>Max maintains a personal wiki — a living knowledge base that grows with every conversation.</strong> Preferences, people, projects, routines — organized into searchable markdown pages and automatically injected into context.</p>
+      </div>
+    </div>
+    <div class="what-item fade-in">
+      <span class="what-item-number">05</span>
+      <div class="what-item-content">
         <h3>Learns any skill</h3>
         <p><strong>Max pulls from <a href="https://skills.sh">skills.sh</a> — the open skills community library.</strong> Email, calendar, smart home, anything. If Max doesn't know how to do something, he can learn it instantly.</p>
       </div>
     </div>
     <div class="what-item fade-in">
-      <span class="what-item-number">05</span>
+      <span class="what-item-number">06</span>
       <div class="what-item-content">
         <h3>Your Copilot subscription</h3>
         <p><strong>No new accounts. No extra cost.</strong> Max works with the models you already have — Claude, GPT, Gemini, and more. Just your existing GitHub Copilot subscription.</p>
       </div>
     </div>
     <div class="what-item fade-in">
-      <span class="what-item-number">06</span>
+      <span class="what-item-number">07</span>
       <div class="what-item-content">
         <h3>Auto mode</h3>
         <p><strong>Max automatically picks the best model for each message.</strong> Fast for simple questions, standard for coding, premium for complex analysis. Saves cost without sacrificing quality — no configuration needed.</p>
@@ -1092,7 +1102,7 @@
         <li style="display:flex;gap:0.5rem;"><span style="color:var(--coral);flex-shrink:0;">→</span> Git operations &amp; GitHub API</li>
         <li style="display:flex;gap:0.5rem;"><span style="color:var(--coral);flex-shrink:0;">→</span> Code search (grep, glob, LSP)</li>
         <li style="display:flex;gap:0.5rem;"><span style="color:var(--coral);flex-shrink:0;">→</span> Web fetch &amp; browser automation</li>
-        <li style="display:flex;gap:0.5rem;"><span style="color:var(--coral);flex-shrink:0;">→</span> SQL / persistent memory</li>
+        <li style="display:flex;gap:0.5rem;"><span style="color:var(--coral);flex-shrink:0;">→</span> Wiki knowledge base &amp; persistent memory</li>
       </ul>
       <a href="https://docs.github.com/en/copilot/how-tos/copilot-cli" class="powered-link">CLI documentation ↗</a>
     </div>
@@ -1112,8 +1122,8 @@
       <p>Spin up Copilot CLI instances in any directory. Dispatch tasks, run them in parallel, get notified when done.</p>
     </div>
     <div class="tool-cell fade-in">
-      <h4>Memory <code>remember</code> <code>recall</code></h4>
-      <p>Persistent long-term memory backed by SQLite. Max saves preferences, facts, project context, and routines automatically.</p>
+      <h4>Wiki Memory <code>remember</code> <code>recall</code> <code>wiki_update</code></h4>
+      <p>LLM-maintained wiki knowledge base. Max organizes what he learns into structured markdown pages — preferences, people, projects, routines — searchable and always in context.</p>
     </div>
     <div class="tool-cell fade-in">
       <h4>Machine Sessions <code>list_machine</code></h4>
@@ -1130,6 +1140,10 @@
     <div class="tool-cell fade-in">
       <h4>Auto Routing <code>toggle_auto</code></h4>
       <p>Intelligent model routing picks the best model for each message. Fast tier for greetings, standard for code, premium for deep analysis. On by default.</p>
+    </div>
+    <div class="tool-cell fade-in">
+      <h4>Wiki Tools <code>wiki_search</code> <code>wiki_read</code> <code>wiki_ingest</code></h4>
+      <p>Full CRUD over the wiki. Search the index, read pages, ingest URLs or documents as sources, and lint for broken links or orphan pages.</p>
     </div>
     <div class="tool-cell fade-in">
       <h4>Self-Management <code>restart_max</code></h4>
