@@ -15,7 +15,8 @@
     "daemon": "tsx src/daemon.ts",
     "tui": "tsx src/tui/index.ts",
     "dev": "tsx --watch src/daemon.ts",
-    "prepublishOnly": "npm run build"
+    "smoke:setup": "node scripts/smoke-setup.mjs",
+    "prepublishOnly": "npm run build && npm run smoke:setup"
   },
   "engines": {
     "node": ">=18"
