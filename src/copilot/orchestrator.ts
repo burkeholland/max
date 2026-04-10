@@ -1,14 +1,27 @@
-import { approveAll, type CopilotClient, type CopilotSession } from "@github/copilot-sdk";
+import { type CopilotClient, type CopilotSession } from "@github/copilot-sdk";
 import { createTools, type WorkerInfo } from "./tools.js";
 import { getOrchestratorSystemMessage } from "./system-message.js";
 import { config, DEFAULT_MODEL } from "../config.js";
 import { loadMcpConfig } from "./mcp-config.js";
 import { getSkillDirectories } from "./skills.js";
 import { resetClient } from "./client.js";
-import { logConversation, getState, setState, deleteState, getRecentConversation, runMemoryMaintenance } from "../store/db.js";
+import { logConversation, getState, setState, deleteState, runMemoryMaintenance, getMemorySummary } from "../store/db.js";
 import { SESSIONS_DIR } from "../paths.js";
 import { resolveModel, type Tier, type RouteResult } from "./router.js";
-import { getRelevantWikiContext, getWikiSummary } from "../wiki/context.js";
+
+
+/**
+ * Permission handler for the orchestrator session.
+ * Only custom-tool (management tools) and mcp (MCP server tools) are allowed.
+ * Shell commands, file read/write, and URL operations are denied so all real
+ * work is forced through worker sessions.
+ */
+const orchestratorPermissionHandler = (request: { kind: string }) => {
+  if (request.kind === "custom-tool" || request.kind === "mcp") {
+    return { kind: "approved" as const };
+  }
+  return { kind: "denied-by-rules" as const };
+};
 
 const MAX_RETRIES = 3;
 const RECONNECT_DELAYS_MS = [1_000, 3_000, 10_000];
@@ -164,7 +177,7 @@ async function ensureOrchestratorSession(): Promise<CopilotSession> {
 async function createOrResumeSession(): Promise<CopilotSession> {
   const client = await ensureClient();
   const { tools, mcpServers, skillDirectories } = getSessionConfig();
-  const wikiSummary = getWikiSummary();
+  const memorySummary = getMemorySummary();
 
   const infiniteSessions = {
     enabled: true,
@@ -182,12 +195,12 @@ async function createOrResumeSession(): Promise<CopilotSession> {
         configDir: SESSIONS_DIR,
         streaming: true,
         systemMessage: {
-          content: getOrchestratorSystemMessage(wikiSummary || undefined, { selfEditEnabled: config.selfEditEnabled }),
+          content: getOrchestratorSystemMessage({ selfEditEnabled: config.selfEditEnabled, memorySummary: memorySummary || undefined }),
         },
         tools,
         mcpServers,
         skillDirectories,
-        onPermissionRequest: approveAll,
+        onPermissionRequest: orchestratorPermissionHandler,
         infiniteSessions,
       });
       console.log(`[max] Resumed orchestrator session successfully`);
@@ -206,40 +219,21 @@ async function createOrResumeSession(): Promise<CopilotSession> {
     configDir: SESSIONS_DIR,
     streaming: true,
     systemMessage: {
-      content: getOrchestratorSystemMessage(wikiSummary || undefined, { selfEditEnabled: config.selfEditEnabled }),
+      content: getOrchestratorSystemMessage({
+        selfEditEnabled: config.selfEditEnabled,
+        memorySummary: memorySummary || undefined,
+      }),
     },
     tools,
     mcpServers,
     skillDirectories,
-    onPermissionRequest: approveAll,
+    onPermissionRequest: orchestratorPermissionHandler,
     infiniteSessions,
   });
 
   // Persist the session ID for future restarts
   setState(ORCHESTRATOR_SESSION_KEY, session.sessionId);
   console.log(`[max] Created orchestrator session ${session.sessionId.slice(0, 8)}…`);
-
-  // Recover conversation context if available (session was lost, not first run)
-  const recentHistory = getRecentConversation(30);
-  const recoveryWikiSummary = getWikiSummary();
-  if (recentHistory || recoveryWikiSummary) {
-    console.log(`[max] Injecting recovery context into new session (${recentHistory ? "conversation + " : ""}${recoveryWikiSummary ? "wiki" : ""})`);
-    const parts: string[] = [
-      "[System: Session recovered] Your previous session was lost. Absorb this context silently — do NOT respond to it.",
-    ];
-    if (recoveryWikiSummary) {
-      parts.push(`\n## Your Wiki Knowledge Base:\n${recoveryWikiSummary}`);
-    }
-    if (recentHistory) {
-      parts.push(`\n## Recent Conversation (last 30 turns):\n${recentHistory}`);
-    }
-    parts.push("\n(End of recovery context. Wait for the next real message.)");
-    try {
-      await session.sendAndWait({ prompt: parts.join("\n") }, 60_000);
-    } catch (err) {
-      console.log(`[max] Context recovery injection failed (non-fatal): ${err instanceof Error ? err.message : err}`);
-    }
-  }
 
   currentSessionModel = config.copilotModel;
   return session;
@@ -294,19 +288,6 @@ async function executeOnSession(
   const session = await ensureOrchestratorSession();
   currentCallback = callback;
 
-  // Inject relevant wiki context into the prompt (skip for background task results)
-  let enrichedPrompt = prompt;
-  if (!prompt.startsWith("[Background task completed]")) {
-    try {
-      const wikiContext = getRelevantWikiContext(prompt, 3);
-      if (wikiContext) {
-        // Cap at 1500 chars to balance context richness vs prompt bloat
-        const trimmed = wikiContext.length > 1500 ? wikiContext.slice(0, 1500) + "…" : wikiContext;
-        enrichedPrompt = `[Wiki context:\n${trimmed}\n]\n\n${prompt}`;
-      }
-    } catch { /* non-fatal */ }
-  }
-
   let accumulated = "";
   let toolCallExecuted = false;
   const unsubToolDone = session.on("tool.execution_complete", () => {
@@ -325,7 +306,7 @@ async function executeOnSession(
 
   try {
     const result = await session.sendAndWait(
-      { prompt: enrichedPrompt, ...(attachments && attachments.length > 0 ? { attachments } : {}) },
+      { prompt, ...(attachments && attachments.length > 0 ? { attachments } : {}) },
       300_000
     );
     const finalContent = result?.data?.content || accumulated || "(No response)";
@@ -362,7 +343,7 @@ async function processQueue(): Promise<void> {
     currentSourceChannel = item.sourceChannel;
     try {
       // Route the model before executing
-      const routeResult = await resolveModel(item.prompt, currentSessionModel || config.copilotModel, recentTiers, copilotClient);
+      const routeResult = resolveModel(item.prompt, currentSessionModel || config.copilotModel, recentTiers);
       if (routeResult.switched) {
         console.log(`[max] Auto: switching to ${routeResult.model} (${routeResult.overrideName || routeResult.tier})`);
         config.copilotModel = routeResult.model;
