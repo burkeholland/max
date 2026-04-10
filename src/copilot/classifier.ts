@@ -1,89 +1,122 @@
-import { approveAll, type CopilotClient, type CopilotSession } from "@github/copilot-sdk";
 import type { Tier } from "./router.js";
 
 // ---------------------------------------------------------------------------
-// Persistent GPT-4.1 classifier session
+// Fast local classifier — replaces GPT-4.1 LLM classifier.
+// Runs in microseconds instead of up to 8 seconds.
+// Default tier is "standard" (safe for any message).
 // ---------------------------------------------------------------------------
 
-const CLASSIFIER_MODEL = "gpt-4.1";
-const CLASSIFY_TIMEOUT_MS = 8_000;
+// Whole-message matches for trivial/casual messages (lowercase, trimmed)
+const FAST_EXACT = new Set([
+  "hello", "hi", "hey", "yo", "sup", "hiya", "howdy",
+  "good morning", "good evening", "good night", "good afternoon",
+  "morning", "evening", "night",
+  "thanks", "thank you", "thx", "ty", "cheers", "much appreciated",
+  "bye", "goodbye", "see you", "later", "cya", "gotta go",
+  "how are you", "how's it going", "what's up", "wassup", "how you doing",
+  "lol", "haha", "hahaha", "lmao",
+  "what time is it", "what day is it", "what's the date",
+  "who are you", "what are you", "what's your name",
+]);
 
-const SYSTEM_PROMPT = `You are a message complexity classifier for an AI assistant called Max. Your ONLY job is to classify incoming user messages into one of three tiers. Respond with ONLY the tier name — nothing else.
+// Patterns for slightly varied but still trivial messages
+const FAST_PATTERNS: RegExp[] = [
+  /^(?:hey|hi|hello|yo|sup|hiya|howdy)\b[\s!.,?]*$/i,
+  /^good (?:morning|evening|night|afternoon)\b[\s!.,?]*$/i,
+  /^(?:thanks?|thank you|thx|ty|cheers)\b[\s!.,]*$/i,
+  /^(?:bye|goodbye|see you|later|cya)\b[\s!.,]*$/i,
+  /^what (?:time|day|date) is it\??$/i,
+  /^(?:who|what) are you\??$/i,
+];
 
-Tiers:
-- FAST: Greetings, thanks, acknowledgments, simple yes/no, trivial factual questions ("what time is it?", "hello", "thanks"), casual chat with no technical depth.
-- STANDARD: Coding tasks, file operations, tool usage requests, moderate reasoning, questions about technical topics, requests to create/check/manage things, anything involving code or development workflow.
-- PREMIUM: Complex architecture decisions, deep analysis, multi-step reasoning, comparing trade-offs, detailed explanations of complex topics, debugging intricate issues, designing systems, strategic planning.
+// Max length for a message to qualify as FAST
+const FAST_MAX_LENGTH = 60;
 
-Rules:
-- If unsure, respond STANDARD (it's the safe default).
-- Respond with exactly one word: FAST, STANDARD, or PREMIUM.`;
+// Technical content signals that disqualify a short message from FAST
+const TECHNICAL_RE = /[`{}()<>|]|\.\w{1,5}\b|\b(?:error|bug|fix|code|file|function|class|import|debug|test|build|deploy|run|install|config|server|api|database|query|commit|merge|branch|refactor)\b/i;
 
-let classifierSession: CopilotSession | undefined;
-let sessionClient: CopilotClient | undefined;
+// ---------------------------------------------------------------------------
+// Premium detection
+// ---------------------------------------------------------------------------
 
-async function ensureSession(client: CopilotClient): Promise<CopilotSession> {
-  // Recreate if the client changed (e.g. after a reset)
-  if (classifierSession && sessionClient === client) {
-    return classifierSession;
-  }
+// Word-boundary keywords that indicate complex/premium tasks
+const PREMIUM_KEYWORDS: string[] = [
+  "architecture", "architect", "architectural",
+  "trade-off", "tradeoff",
+  "pros and cons",
+  "system design",
+  "design system",
+  "strategic", "strategy",
+  "scalability", "scaling strategy",
+  "migration plan", "migration strategy",
+  "performance analysis", "performance audit",
+  "security audit", "security review", "threat model",
+  "deep dive", "deep analysis",
+  "root cause analysis",
+  "design doc", "design document",
+  "rfc", "adr",
+];
 
-  // Destroy stale session
-  if (classifierSession) {
-    classifierSession.destroy().catch(() => {});
-    classifierSession = undefined;
-  }
+// Phrase patterns that strongly indicate complex work
+const PREMIUM_PHRASES: RegExp[] = [
+  /\b(?:design|architect|plan)\b.*\b(?:system|service|platform|infrastructure)\b/i,
+  /\b(?:compare|evaluate|analyze)\b.*\b(?:approach|option|solution|strategy|trade.?off)\b/i,
+  /\bhow should (?:we|i)\b.*\b(?:architect|design|structure|organize|scale)\b/i,
+  /\bwhat(?:'s| is) the best (?:way|approach|strategy)\b/i,
+  /\b(?:explain|describe)\b.*\b(?:in detail|thoroughly|comprehensively)\b/i,
+  /\b(?:debug|diagnose|investigate)\b.*\b(?:complex|intricate|intermittent|race condition|deadlock)\b/i,
+  /\b(?:refactor|restructure|rearchitect)\b.*\b(?:system|codebase|module|service)\b/i,
+];
 
-  classifierSession = await client.createSession({
-    model: CLASSIFIER_MODEL,
-    streaming: false,
-    systemMessage: { content: SYSTEM_PROMPT },
-    onPermissionRequest: approveAll,
-  });
-  sessionClient = client;
-  return classifierSession;
+// Premium messages should be substantial
+const PREMIUM_MIN_LENGTH = 30;
+
+// ---------------------------------------------------------------------------
+// Main classify function
+// ---------------------------------------------------------------------------
+
+/** Word-boundary match that avoids partial-word hits (e.g. "ui" ≠ "fruit"). */
+function wordMatch(text: string, keyword: string): boolean {
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b${escaped}\\b`, "i").test(text);
 }
-
-const TIER_MAP: Record<string, Tier> = {
-  FAST: "fast",
-  STANDARD: "standard",
-  PREMIUM: "premium",
-};
 
 /**
- * Classify a message using GPT-4.1.
- * Returns the tier, or null if the classifier is unavailable / times out.
+ * Classify a message tier using fast local heuristics.
+ * Synchronous — no LLM calls, no network, no I/O.
  */
-export async function classifyWithLLM(
-  client: CopilotClient,
-  message: string,
-): Promise<Tier | null> {
-  try {
-    const session = await ensureSession(client);
-    const result = await session.sendAndWait(
-      { prompt: message },
-      CLASSIFY_TIMEOUT_MS,
-    );
-    const raw = (result?.data?.content || "").trim().toUpperCase();
-    return TIER_MAP[raw] ?? "standard";
-  } catch (err) {
-    console.log(
-      `[max] Classifier error (falling back to heuristics): ${err instanceof Error ? err.message : err}`,
-    );
-    // Destroy broken session so it's recreated next time
-    if (classifierSession) {
-      classifierSession.destroy().catch(() => {});
-      classifierSession = undefined;
+export function classify(message: string): Tier {
+  const text = message.trim();
+  const lower = text.toLowerCase();
+
+  // --- FAST detection ---
+  if (text.length <= FAST_MAX_LENGTH) {
+    if (FAST_EXACT.has(lower)) return "fast";
+
+    // Pattern match — only if no technical content
+    if (!TECHNICAL_RE.test(text)) {
+      for (const pattern of FAST_PATTERNS) {
+        if (pattern.test(text)) return "fast";
+      }
     }
-    return null;
   }
+
+  // --- PREMIUM detection ---
+  if (text.length >= PREMIUM_MIN_LENGTH) {
+    // Phrase patterns (strongest signal)
+    for (const pattern of PREMIUM_PHRASES) {
+      if (pattern.test(text)) return "premium";
+    }
+
+    // Keyword matches
+    for (const keyword of PREMIUM_KEYWORDS) {
+      if (wordMatch(lower, keyword)) return "premium";
+    }
+  }
+
+  // --- Default: STANDARD ---
+  return "standard";
 }
 
-/** Tear down the classifier session (e.g. on shutdown). */
-export function stopClassifier(): void {
-  if (classifierSession) {
-    classifierSession.destroy().catch(() => {});
-    classifierSession = undefined;
-    sessionClient = undefined;
-  }
-}
+/** No-op — the local classifier has no session to tear down. */
+export function stopClassifier(): void {}

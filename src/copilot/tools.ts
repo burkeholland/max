@@ -9,9 +9,6 @@ import { config, persistModel } from "../config.js";
 import { SESSIONS_DIR } from "../paths.js";
 import { getCurrentSourceChannel, switchSessionModel } from "./orchestrator.js";
 import { getRouterConfig, updateRouterConfig } from "./router.js";
-import { ensureWikiStructure, readPage, writePage, deletePage, listPages, writeRawSource, listSources, getWikiDir } from "../wiki/fs.js";
-import { searchIndex, addToIndex, removeFromIndex, parseIndex, type IndexEntry } from "../wiki/index-manager.js";
-import { appendLog } from "../wiki/log-manager.js";
 
 function isTimeoutError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
@@ -484,11 +481,11 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
       },
     }),
 
-    // ----- Wiki-backed memory facades (preserve existing remember/recall/forget UX) -----
+    // ----- Memory tools -----
 
     defineTool("remember", {
       description:
-        "Save something to Max's wiki knowledge base. Use when the user says 'remember that...', " +
+        "Save something to Max's memory. Use when the user says 'remember that...', " +
         "states a preference, shares a fact about themselves, or mentions something important " +
         "that should be remembered across conversations. Also use proactively when you detect " +
         "important information worth persisting.",
@@ -499,312 +496,42 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
         source: z.enum(["user", "auto"]).optional().describe("'user' if explicitly asked to remember, 'auto' if Max detected it (default: 'user')"),
       }),
       handler: async (args) => {
-        ensureWikiStructure();
-        const categoryMap: Record<string, string> = {
-          preference: "pages/preferences.md",
-          fact: "pages/facts.md",
-          project: "pages/projects.md",
-          person: "pages/people.md",
-          routine: "pages/routines.md",
-        };
-        const pagePath = categoryMap[args.category] || `pages/${args.category}.md`;
-        const title = args.category.charAt(0).toUpperCase() + args.category.slice(1);
-        const now = new Date().toISOString().slice(0, 10);
-        const tag = args.source === "auto" ? "auto" : "user";
-
-        const existing = readPage(pagePath);
-        if (existing) {
-          // Append to existing page
-          const updated = existing.replace(
-            /^(---[\s\S]*?updated:\s*)[\d-]+/m,
-            `$1${now}`
-          );
-          writePage(pagePath, updated.trimEnd() + `\n- ${args.content} _(${tag}, ${now})_\n`);
-        } else {
-          const page = [
-            "---",
-            `title: ${title}`,
-            `tags: [${args.category}]`,
-            `created: ${now}`,
-            `updated: ${now}`,
-            "---",
-            "",
-            `# ${title}`,
-            "",
-            `- ${args.content} _(${tag}, ${now})_`,
-            "",
-          ].join("\n");
-          writePage(pagePath, page);
-        }
-
-        addToIndex({
-          path: pagePath,
-          title: `${title}`,
-          summary: `${title} stored in Max's wiki`,
-          section: "Knowledge",
-        });
-        appendLog("update", `remember (${args.category}): ${args.content.slice(0, 80)}`);
-
-        // Also write to SQLite for backwards compat during transition
         const id = addMemory(args.category, args.content, args.source || "user");
-        return `Remembered (wiki + #${id}, ${args.category}): "${args.content}"`;
+        return `Remembered (#${id}, ${args.category}): "${args.content}"`;
       },
     }),
 
     defineTool("recall", {
       description:
-        "Search Max's wiki knowledge base for stored facts, preferences, or information. " +
+        "Search Max's memory for stored facts, preferences, or information. " +
         "Use when you need to look up something the user told you before, or when the user " +
         "asks 'do you remember...?' or 'what do you know about...?'",
       parameters: z.object({
-        keyword: z.string().optional().describe("Search term to match against wiki pages"),
+        keyword: z.string().optional().describe("Search term to match against memories"),
         category: z.enum(["preference", "fact", "project", "person", "routine"]).optional()
           .describe("Optional: filter by category"),
       }),
       handler: async (args) => {
-        ensureWikiStructure();
-
-        // Search wiki index
-        const query = [args.keyword, args.category].filter(Boolean).join(" ");
-        const matches = searchIndex(query || "", 5);
-
-        if (matches.length === 0) {
-          // Fall back to SQLite search for pre-migration content
-          const results = searchMemories(args.keyword, args.category);
-          if (results.length === 0) return "No matching memories found in wiki or database.";
-          const lines = results.map(
-            (m) => `• [db#${m.id}] [${m.category}] ${m.content} (${m.source}, ${m.created_at})`
-          );
-          return `Found ${results.length} in legacy database:\n${lines.join("\n")}`;
-        }
-
-        const sections: string[] = [];
-        for (const match of matches) {
-          const content = readPage(match.path);
-          if (!content) continue;
-          const body = content.replace(/^---[\s\S]*?---\s*/, "").trim();
-          const trimmed = body.length > 800 ? body.slice(0, 800) + "…" : body;
-          sections.push(`**${match.title}** (${match.path}):\n${trimmed}`);
-        }
-
-        return sections.length > 0
-          ? `Found ${matches.length} wiki page(s):\n\n${sections.join("\n\n")}`
-          : "No matching content found.";
+        const results = searchMemories(args.keyword, args.category);
+        if (results.length === 0) return "No matching memories found.";
+        const lines = results.map(
+          (m) => `• [#${m.id}] [${m.category}] ${m.content} (${m.source}, ${m.created_at})`
+        );
+        return `Found ${results.length} memory/memories:\n${lines.join("\n")}`;
       },
     }),
 
     defineTool("forget", {
       description:
-        "Remove specific content from Max's knowledge base. For wiki content, specify the " +
-        "page path and the text to remove. For legacy database entries, specify the memory_id.",
+        "Remove a specific memory from Max's memory store by its ID number.",
       parameters: z.object({
-        memory_id: z.number().int().optional().describe("Legacy database memory ID to remove"),
-        page_path: z.string().optional().describe("Wiki page path containing the content to remove"),
-        content: z.string().optional().describe("The specific text to remove from the wiki page"),
+        memory_id: z.number().int().describe("Memory ID to remove (shown as #N in recall results)"),
       }),
       handler: async (args) => {
-        const results: string[] = [];
-
-        // Remove from legacy DB if ID provided
-        if (args.memory_id !== undefined) {
-          const removed = removeMemory(args.memory_id);
-          results.push(removed
-            ? `Removed db#${args.memory_id}.`
-            : `db#${args.memory_id} not found.`);
-        }
-
-        // Remove from wiki if page + content provided
-        if (args.page_path && args.content) {
-          const page = readPage(args.page_path);
-          if (page) {
-            const lines = page.split("\n");
-            const before = lines.length;
-            // Only remove bullet-point lines that contain the target content
-            const updated = lines
-              .filter((line) => {
-                if (line.trim().startsWith("-") && line.includes(args.content!)) {
-                  return false;
-                }
-                return true;
-              })
-              .join("\n");
-            const removed = before - updated.split("\n").length;
-            if (removed > 0) {
-              writePage(args.page_path, updated);
-              appendLog("update", `forget: removed ${removed} line(s) matching "${args.content!.slice(0, 60)}" from ${args.page_path}`);
-              results.push(`Removed ${removed} line(s) from ${args.page_path}.`);
-            } else {
-              results.push(`No matching bullet points found in ${args.page_path}.`);
-            }
-          } else {
-            results.push(`Page ${args.page_path} not found.`);
-          }
-        }
-
-        return results.length > 0 ? results.join(" ") : "Nothing to remove — provide memory_id or page_path + content.";
-      },
-    }),
-
-    // ----- New wiki tools -----
-
-    defineTool("wiki_search", {
-      description:
-        "Search Max's wiki knowledge base. Returns matching page titles, paths, and summaries " +
-        "from the wiki index. Use this to find relevant knowledge before answering questions.",
-      parameters: z.object({
-        query: z.string().describe("What to search for in the wiki"),
-      }),
-      handler: async (args) => {
-        ensureWikiStructure();
-        const matches = searchIndex(args.query, 10);
-        if (matches.length === 0) return "No matching wiki pages found.";
-        const lines = matches.map(
-          (m) => `• [${m.title}](${m.path}) — ${m.summary}`
-        );
-        return `Found ${matches.length} page(s):\n${lines.join("\n")}`;
-      },
-    }),
-
-    defineTool("wiki_read", {
-      description:
-        "Read a specific wiki page by path. Use after wiki_search to read full page content. " +
-        "Paths are relative to the wiki root (e.g. 'pages/preferences.md', 'index.md').",
-      parameters: z.object({
-        path: z.string().describe("Path to the wiki page (e.g. 'pages/people/burke.md', 'index.md')"),
-      }),
-      handler: async (args) => {
-        ensureWikiStructure();
-        const content = readPage(args.path);
-        if (!content) return `Page not found: ${args.path}`;
-        return content;
-      },
-    }),
-
-    defineTool("wiki_update", {
-      description:
-        "Create or update a wiki page. You provide the full page content (markdown with optional " +
-        "YAML frontmatter). The page will be written to disk and the index updated. Use this for " +
-        "rich knowledge pages, entity pages, synthesis documents — anything more structured than " +
-        "a quick 'remember' call. After creating/updating a page, the index is automatically updated.",
-      parameters: z.object({
-        path: z.string().describe("Page path relative to wiki root (e.g. 'pages/projects/max.md')"),
-        title: z.string().describe("Page title for the index"),
-        summary: z.string().describe("One-line summary for the index"),
-        section: z.string().optional().describe("Index section (default: 'Knowledge')"),
-        content: z.string().describe("Full page content (markdown)"),
-      }),
-      handler: async (args) => {
-        ensureWikiStructure();
-        writePage(args.path, args.content);
-        addToIndex({
-          path: args.path,
-          title: args.title,
-          summary: args.summary,
-          section: args.section || "Knowledge",
-        });
-        appendLog("update", `wiki_update: ${args.title} (${args.path})`);
-        return `Wiki page updated: ${args.title} (${args.path})`;
-      },
-    }),
-
-    defineTool("wiki_ingest", {
-      description:
-        "Ingest a source into the wiki. Saves the raw content as an immutable source document, " +
-        "then returns it so you can create wiki pages from it. Supports URLs (fetches the page) " +
-        "or raw text passed directly. For local files, read the file yourself and pass content as text.",
-      parameters: z.object({
-        type: z.enum(["url", "text"]).describe("Source type: 'url' to fetch a web page, 'text' for raw content"),
-        source: z.string().describe("URL or raw text content"),
-        name: z.string().optional().describe("Name for the source (auto-generated if omitted)"),
-      }),
-      handler: async (args) => {
-        ensureWikiStructure();
-        let content: string;
-        let sourceName: string;
-
-        if (args.type === "url") {
-          // Validate URL scheme
-          let parsedUrl: URL;
-          try {
-            parsedUrl = new URL(args.source);
-          } catch {
-            return "Invalid URL format.";
-          }
-          if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-            return "Only http and https URLs are supported.";
-          }
-          // Block private/internal addresses
-          const host = parsedUrl.hostname.toLowerCase();
-          if (host === "localhost" || host === "127.0.0.1" || host === "::1" ||
-              host.startsWith("10.") || host.startsWith("192.168.") ||
-              host.startsWith("169.254.") || host === "metadata.google.internal") {
-            return "Cannot fetch internal/private URLs.";
-          }
-          try {
-            const res = await fetch(args.source);
-            if (!res.ok) {
-              return `Fetch failed: ${res.status} ${res.statusText}`;
-            }
-            content = await res.text();
-            // Strip HTML tags for a rough markdown conversion
-            content = content.replace(/<script[\s\S]*?<\/script>/gi, "")
-              .replace(/<style[\s\S]*?<\/style>/gi, "")
-              .replace(/<[^>]+>/g, " ")
-              .replace(/\s{2,}/g, " ")
-              .trim();
-          } catch (err) {
-            return `Failed to fetch URL: ${err instanceof Error ? err.message : err}`;
-          }
-          sourceName = args.name || parsedUrl.hostname + "-" + Date.now();
-        } else {
-          content = args.source;
-          sourceName = args.name || "text-" + Date.now();
-        }
-
-        const fileName = `${new Date().toISOString().slice(0, 10)}-${sourceName}.md`;
-        writeRawSource(fileName, content);
-        appendLog("ingest", `Ingested ${args.type}: ${sourceName} (${content.length} chars)`);
-
-        // Return the content so the LLM can create wiki pages from it
-        const preview = content.length > 3000 ? content.slice(0, 3000) + "\n\n…(truncated)" : content;
-        return `Source saved as sources/${fileName} (${content.length} chars).\n\n` +
-          "Now create wiki pages from this content using wiki_update. " +
-          "Update existing pages and the index as needed.\n\n" +
-          `--- Source content ---\n${preview}`;
-      },
-    }),
-
-    defineTool("wiki_lint", {
-      description:
-        "Health-check the wiki. Looks for: orphan pages (not in index), index entries pointing " +
-        "to missing pages, and pages with no cross-references. Returns a report.",
-      parameters: z.object({}),
-      handler: async () => {
-        ensureWikiStructure();
-        const indexEntries = parseIndex();
-        const pages = listPages();
-        const sources = listSources();
-
-        const indexPaths = new Set(indexEntries.map((e) => e.path));
-        const orphans = pages.filter((p) => !indexPaths.has(p));
-        const missing = indexEntries.filter((e) => !readPage(e.path));
-
-        const report: string[] = [`Wiki health report (${pages.length} pages, ${sources.length} sources):`];
-
-        if (orphans.length > 0) {
-          report.push(`\n**Orphan pages** (not in index):\n${orphans.map((p) => `- ${p}`).join("\n")}`);
-        }
-        if (missing.length > 0) {
-          report.push(`\n**Missing pages** (in index but not on disk):\n${missing.map((e) => `- ${e.path}: ${e.title}`).join("\n")}`);
-        }
-        if (orphans.length === 0 && missing.length === 0) {
-          report.push("\n✅ No issues found. Index and pages are in sync.");
-        }
-
-        report.push(`\n**Suggestions**: Look for pages that should link to each other, topics mentioned but lacking their own page, and stale content that needs updating.`);
-
-        appendLog("lint", `${orphans.length} orphans, ${missing.length} missing`);
-        return report.join("\n");
+        const removed = removeMemory(args.memory_id);
+        return removed
+          ? `Removed memory #${args.memory_id}.`
+          : `Memory #${args.memory_id} not found.`;
       },
     }),
 

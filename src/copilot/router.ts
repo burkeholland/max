@@ -1,6 +1,5 @@
 import { getState, setState } from "../store/db.js";
-import { classifyWithLLM } from "./classifier.js";
-import type { CopilotClient } from "@github/copilot-sdk";
+import { classify } from "./classifier.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -120,14 +119,13 @@ export function updateRouterConfig(partial: Partial<RouterConfig>): RouterConfig
 // ---------------------------------------------------------------------------
 
 /**
- * Classify a message using GPT-4.1. Falls back to "standard" if the LLM
- * is unavailable. Background tasks and follow-ups are handled deterministically.
+ * Classify a message using fast local heuristics.
+ * Background tasks and follow-ups are handled deterministically.
  */
-async function classifyMessage(
+function classifyMessage(
   prompt: string,
   recentTiers: Tier[],
-  client?: CopilotClient,
-): Promise<Tier> {
+): Tier {
   const text = sanitize(prompt);
   const lower = text.toLowerCase();
 
@@ -140,30 +138,21 @@ async function classifyMessage(
     if (isFollowUp) return recentTiers[recentTiers.length - 1];
   }
 
-  // LLM classification
-  if (client) {
-    const tier = await classifyWithLLM(client, text);
-    if (tier) {
-      console.log(`[max] Classifier: ${tier}`);
-      return tier;
-    }
-  }
-
-  // Fallback — standard is always safe
-  console.log(`[max] Classifier (fallback): standard`);
-  return "standard";
+  // Local heuristic classification
+  const tier = classify(text);
+  console.log(`[max] Classifier: ${tier}`);
+  return tier;
 }
 
 // ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
 
-export async function resolveModel(
+export function resolveModel(
   prompt: string,
   currentModel: string,
   recentTiers: Tier[],
-  client?: CopilotClient,
-): Promise<RouteResult> {
+): RouteResult {
   const config = getRouterConfig();
 
   // Router disabled → manual mode
@@ -184,7 +173,7 @@ export async function resolveModel(
   }
 
   // 2. Classify the message
-  const tier = await classifyMessage(prompt, recentTiers, client);
+  const tier = classifyMessage(prompt, recentTiers);
   const targetModel = config.tierModels[tier];
   const wouldSwitch = targetModel !== currentModel;
 
