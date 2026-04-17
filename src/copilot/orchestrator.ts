@@ -9,6 +9,7 @@ import { logConversation, getState, setState, deleteState, getRecentConversation
 import { SESSIONS_DIR } from "../paths.js";
 import { resolveModel, type Tier, type RouteResult } from "./router.js";
 import { getRelevantWikiContext, getWikiSummary } from "../wiki/context.js";
+import { maybeWriteEpisode } from "./episode-writer.js";
 
 const MAX_RETRIES = 3;
 const RECONNECT_DELAYS_MS = [1_000, 3_000, 10_000];
@@ -385,6 +386,10 @@ async function processQueue(): Promise<void> {
 
       const result = await executeOnSession(item.prompt, item.callback, item.attachments);
       item.resolve(result);
+      // Async episode writing — never blocks the user
+      if (copilotClient) {
+        maybeWriteEpisode(copilotClient).catch(() => {});
+      }
     } catch (err) {
       item.reject(err);
     }
