@@ -6,7 +6,8 @@ import { sendToOrchestrator, getWorkers, cancelCurrentMessage, getLastRouteResul
 import { sendPhoto } from "../telegram/bot.js";
 import { config, persistModel } from "../config.js";
 import { getRouterConfig, updateRouterConfig } from "../copilot/router.js";
-import { searchMemories } from "../store/db.js";
+import { searchIndex, parseIndex } from "../wiki/index-manager.js";
+import { readPage, ensureWikiStructure } from "../wiki/fs.js";
 import { listSkills, removeSkill } from "../copilot/skills.js";
 import { restartDaemon } from "../daemon.js";
 import { API_TOKEN_PATH, ensureMaxHome } from "../paths.js";
@@ -216,10 +217,18 @@ app.post("/auto", (req: Request, res: Response) => {
   res.json(updated);
 });
 
-// List memories
+// List wiki knowledge
 app.get("/memory", (_req: Request, res: Response) => {
-  const memories = searchMemories(undefined, undefined, 100);
-  res.json(memories);
+  ensureWikiStructure();
+  const entries = parseIndex();
+  const results = entries.map((e) => ({
+    path: e.path,
+    title: e.title,
+    summary: e.summary,
+    tags: e.tags || [],
+    updated: e.updated || "",
+  }));
+  res.json(results);
 });
 
 // List skills

@@ -2,7 +2,8 @@ import { Bot, type Context } from "grammy";
 import { config, persistModel } from "../config.js";
 import { sendToOrchestrator, cancelCurrentMessage, getWorkers, getLastRouteResult } from "../copilot/orchestrator.js";
 import { chunkMessage, toTelegramMarkdown } from "./formatter.js";
-import { searchMemories } from "../store/db.js";
+import { parseIndex } from "../wiki/index-manager.js";
+import { ensureWikiStructure } from "../wiki/fs.js";
 import { listSkills } from "../copilot/skills.js";
 import { restartDaemon } from "../daemon.js";
 import { getRouterConfig, updateRouterConfig } from "../copilot/router.js";
@@ -162,12 +163,17 @@ export function createBot(): Bot {
     }
   });
   bot.command("memory", async (ctx) => {
-    const memories = searchMemories(undefined, undefined, 50);
-    if (memories.length === 0) {
-      await ctx.reply("No memories stored.");
+    ensureWikiStructure();
+    const entries = parseIndex();
+    if (entries.length === 0) {
+      await ctx.reply("No wiki pages yet.");
     } else {
-      const lines = memories.map((m) => `#${m.id} [${m.category}] ${m.content}`);
-      await ctx.reply(lines.join("\n") + `\n\n${memories.length} total`);
+      const lines = entries.map((e) => {
+        let line = `• ${e.title}: ${e.summary}`;
+        if (e.updated) line += ` (${e.updated})`;
+        return line;
+      });
+      await ctx.reply(lines.join("\n") + `\n\n${entries.length} wiki pages total`);
     }
   });
   bot.command("skills", async (ctx) => {

@@ -5,7 +5,7 @@ import { config, DEFAULT_MODEL } from "../config.js";
 import { loadMcpConfig } from "./mcp-config.js";
 import { getSkillDirectories } from "./skills.js";
 import { resetClient } from "./client.js";
-import { logConversation, getState, setState, deleteState, getRecentConversation, runMemoryMaintenance } from "../store/db.js";
+import { logConversation, getState, setState, deleteState, getRecentConversation } from "../store/db.js";
 import { SESSIONS_DIR } from "../paths.js";
 import { resolveModel, type Tier, type RouteResult } from "./router.js";
 import { getRelevantWikiContext, getWikiSummary } from "../wiki/context.js";
@@ -265,16 +265,6 @@ export async function initOrchestrator(client: CopilotClient): Promise<void> {
   console.log(`[max] Skill directories: ${skillDirectories.join(", ") || "(none)"}`);
   console.log(`[max] Persistent session mode — conversation history maintained by SDK`);
   startHealthCheck();
-
-  // Run memory maintenance on startup (best-effort)
-  try {
-    const { deduped, pruned, capped } = runMemoryMaintenance();
-    if (deduped + pruned + capped > 0) {
-      console.log(`[max] Memory maintenance: ${deduped} deduped, ${pruned} stale pruned, ${capped} capped`);
-    }
-  } catch (err) {
-    console.log(`[max] Memory maintenance failed (non-fatal): ${err instanceof Error ? err.message : err}`);
-  }
 
   // Eagerly create/resume the orchestrator session
   try {
