@@ -94,6 +94,14 @@ export function createBot(): Bot {
   });
 
   // /start and /help
+  /** Safely reply with chunking for messages that may exceed Telegram's 4096 char limit. */
+  async function safeReply(ctx: Context, text: string): Promise<void> {
+    const chunks = chunkMessage(text);
+    for (const chunk of chunks) {
+      await ctx.reply(chunk);
+    }
+  }
+
   bot.command("start", (ctx) => ctx.reply("Max is online. Send me anything."));
   bot.command("help", (ctx) =>
     ctx.reply(
@@ -157,7 +165,7 @@ export function createBot(): Bot {
       const lines = models.map((m) =>
         m.id === config.copilotModel ? `• ${m.id} ← current` : `• ${m.id}`
       );
-      await ctx.reply(lines.join("\n"));
+      await safeReply(ctx, lines.join("\n"));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await ctx.reply(`Failed to list models: ${msg}`);
@@ -174,7 +182,7 @@ export function createBot(): Bot {
         if (e.updated) line += ` (${e.updated})`;
         return line;
       });
-      await ctx.reply(lines.join("\n") + `\n\n${entries.length} wiki pages total`);
+      await safeReply(ctx, lines.join("\n") + `\n\n${entries.length} wiki pages total`);
     }
   });
   bot.command("skills", async (ctx) => {
@@ -183,7 +191,7 @@ export function createBot(): Bot {
       await ctx.reply("No skills installed.");
     } else {
       const lines = skills.map((s) => `• ${s.name} (${s.source}) — ${s.description}`);
-      await ctx.reply(lines.join("\n"));
+      await safeReply(ctx, lines.join("\n"));
     }
   });
   const agentCommandHandler = async (ctx: Context) => {
@@ -194,7 +202,7 @@ export function createBot(): Bot {
       const lines = workers.map((w) => {
         return `🟢 @${w.slug} (${w.model}) — ${w.description}`;
       });
-      await ctx.reply(lines.join("\n"));
+      await safeReply(ctx, lines.join("\n"));
     }
   };
   bot.command("agents", agentCommandHandler);
