@@ -22,6 +22,16 @@ Or install directly with npm:
 npm install -g heymax
 ```
 
+## Upgrading
+
+If you already have Max installed:
+
+```bash
+max update
+```
+
+Or manually: `npm install -g heymax@latest`. Your `~/.max/` config carries forward automatically — SQLite memories are migrated to wiki pages, bundled agents are synced (your customizations preserved), and no data is lost.
+
 ## Quick Start
 
 ### 1. Run setup

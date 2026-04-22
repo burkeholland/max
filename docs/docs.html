@@ -468,6 +468,27 @@
 </div>
 
 
+<h3>Upgrading from a previous version</h3>
+
+<p>If you already have Max installed, just run:</p>
+
+<div class="code-block">
+  <div class="code-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="label">terminal</span></div>
+  <div class="code-body"><span class="prompt">$</span> <span class="cmd">max update</span></div>
+</div>
+
+<p>Or upgrade manually with <code>npm install -g heymax@latest</code>. Your existing configuration in <code>~/.max/.env</code> is fully backward-compatible — no changes needed.</p>
+
+<div class="callout">
+  <p><strong>What happens automatically on upgrade:</strong></p>
+  <ul>
+    <li>If you had SQLite-based memories from an earlier version, they are migrated into wiki pages on first launch and originals are archived.</li>
+    <li>Bundled agent definitions are synced — your customizations are preserved, only missing agents are added.</li>
+    <li>No data is lost. Your Telegram config, model preferences, and wiki all carry forward.</li>
+  </ul>
+</div>
+
+
 <h2 id="setup">Setup<span>.</span></h2>
 
 <p>After installing, run the interactive setup wizard:</p>
@@ -499,6 +520,7 @@
     <tr><td>max tui</td><td>Open the terminal UI. Connects to the running daemon via SSE for real-time streaming.</td></tr>
     <tr><td>max setup</td><td>Run the interactive setup wizard.</td></tr>
     <tr><td>max help</td><td>Show available commands.</td></tr>
+    <tr><td>max update</td><td>Check for updates and install the latest version.</td></tr>
     <tr><td>max --version</td><td>Print the version number.</td></tr>
   </tbody>
 </table>
@@ -787,7 +809,7 @@
 </div>
 
 <footer>
-  <span>max v1.0 — built by <a href="https://postrboard.com">burke holland</a></span>
+  <span>max v1.5 — built by <a href="https://postrboard.com">burke holland</a></span>
   <span>
     <a href="https://github.com/github/copilot-sdk">copilot sdk</a> · 
     <a href="https://github.com/features/copilot/cli/">copilot cli</a> · 
