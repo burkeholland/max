@@ -113,7 +113,7 @@ export function createBot(): Bot {
         "/model <name> — Switch model\n" +
         "/models — List all available models\n" +
         "/auto — Toggle auto model routing\n" +
-        "/memory — Show stored memories\n" +
+        "/memory — Show wiki pages\n" +
         "/skills — List installed skills\n" +
         "/agents — List available agents\n" +
         "/workers — Alias for /agents\n" +

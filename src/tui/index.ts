@@ -782,15 +782,16 @@ function cmdModels(): void {
 }
 
 function cmdMemory(): void {
-  apiGet("/memory", (memories: any[]) => {
-    if (!memories || memories.length === 0) {
-      console.log(C.dim("  No memories stored.\n"));
+  apiGet("/memory", (entries: any[]) => {
+    if (!entries || entries.length === 0) {
+      console.log(C.dim("  No wiki pages yet.\n"));
     } else {
-      for (const m of memories) {
-        const cat = C.magenta(`[${m.category}]`);
-        console.log(`  ${C.dim(`#${m.id}`)} ${cat} ${m.content}`);
+      for (const e of entries) {
+        let line = `  ${C.boldWhite(e.title)}: ${e.summary}`;
+        if (e.updated) line += C.dim(` (${e.updated})`);
+        console.log(line);
       }
-      console.log(C.dim(`\n  ${memories.length} memories total.\n`));
+      console.log(C.dim(`\n  ${entries.length} wiki pages total.\n`));
     }
   });
 }
@@ -881,7 +882,7 @@ function cmdHelp(): void {
   console.log(`    ${C.coral("/model")} ${C.dim("[name]")}        show or switch model`);
   console.log(`    ${C.coral("/models")}               list all available models`);
   console.log(`    ${C.coral("/auto")}                 toggle auto model routing`);
-  console.log(`    ${C.coral("/memory")}               show stored memories`);
+  console.log(`    ${C.coral("/memory")}               show wiki pages`);
   console.log(`    ${C.coral("/skills")}               list installed skills`);
   console.log(`    ${C.coral("/agents")}               list available agents`);
   console.log(`    ${C.coral("/copy")}                 copy last response`);
