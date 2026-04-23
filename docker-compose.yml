@@ -6,6 +6,8 @@ services:
       - "${API_PORT:-7777}:7777"
     volumes:
       - max-data:/root/.max
+      # Share the API token so the host TUI can authenticate with the container
+      - ${HOME}/.max/api-token:/root/.max/api-token
       # Mount host Copilot auth so the SDK can authenticate.
       # Alternatively, set GITHUB_TOKEN in your .env file instead.
       - ${HOME}/.copilot:/root/.copilot:ro
