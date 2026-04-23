@@ -140,6 +140,43 @@ Telegram ──→ Max Daemon ←── TUI
 - **Orchestrator** — long-running Copilot session with custom tools for session management
 - **Workers** — child Copilot sessions for specific coding tasks
 
+## Docker
+
+```bash
+# Build and start
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop
+docker compose down
+```
+
+### Authentication
+
+The Copilot SDK needs GitHub auth. Pick one:
+
+| Method | How |
+|--------|-----|
+| **GITHUB_TOKEN** (recommended) | Add `GITHUB_TOKEN=ghp_…` to your `.env` file |
+| **Host mount** | The default compose file mounts `~/.copilot` read-only |
+
+### Data persistence
+
+Max data (`~/.max/`) is stored in a Docker volume called `max-data`. Your database, wiki, and agent definitions survive container restarts.
+
+### Worker directories
+
+Workers run inside the container, so host paths like `~/dev/myapp` aren't available by default. Mount project directories in `docker-compose.yml`:
+
+```yaml
+volumes:
+  - ${HOME}/dev:/workspace
+```
+
+Then tell Max to work in `/workspace/myapp` instead of `~/dev/myapp`.
+
 ## Development
 
 ```bash

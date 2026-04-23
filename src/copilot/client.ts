@@ -2,11 +2,17 @@ import { CopilotClient } from "@github/copilot-sdk";
 
 let client: CopilotClient | undefined;
 
+/** Resolve an explicit GitHub token from env vars, if any. */
+function resolveGithubToken(): string | undefined {
+  return process.env.GITHUB_TOKEN || process.env.GH_TOKEN || undefined;
+}
+
 export async function getClient(): Promise<CopilotClient> {
   if (!client) {
+    const githubToken = resolveGithubToken();
     client = new CopilotClient({
       autoStart: true,
-      autoRestart: true,
+      ...(githubToken ? { githubToken } : {}),
     });
     await client.start();
   }

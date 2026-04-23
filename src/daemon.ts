@@ -210,6 +210,13 @@ export async function restartDaemon(): Promise<void> {
   try { await stopClient(); } catch { /* best effort */ }
   closeDb();
 
+  // In Docker, exit cleanly and let the container restart policy handle it.
+  // Spawning a detached child won't work because PID 1 exiting kills the container.
+  if (process.env.MAX_DOCKER === "1") {
+    console.log("[max] Docker mode — exiting for container restart.");
+    process.exit(0);
+  }
+
   // Spawn a detached replacement process with the same args (include execArgv for tsx/loaders)
   const child = spawn(process.execPath, [...process.execArgv, ...process.argv.slice(1)], {
     detached: true,

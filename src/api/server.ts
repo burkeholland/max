@@ -291,8 +291,9 @@ app.post("/send-photo", async (req: Request, res: Response) => {
 
 export function startApiServer(): Promise<void> {
   return new Promise((resolve, reject) => {
-    const server = app.listen(config.apiPort, "127.0.0.1", () => {
-      console.log(`[max] HTTP API listening on http://127.0.0.1:${config.apiPort}`);
+    const host = process.env.MAX_DOCKER === "1" ? "0.0.0.0" : "127.0.0.1";
+    const server = app.listen(config.apiPort, host, () => {
+      console.log(`[max] HTTP API listening on http://${host}:${config.apiPort}`);
       resolve();
     });
     server.on("error", (err: NodeJS.ErrnoException) => {

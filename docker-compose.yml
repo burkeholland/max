@@ -1,0 +1,22 @@
+services:
+  max:
+    build: .
+    init: true
+    ports:
+      - "${API_PORT:-7777}:7777"
+    volumes:
+      - max-data:/root/.max
+      # Mount host Copilot auth so the SDK can authenticate.
+      # Alternatively, set GITHUB_TOKEN in your .env file instead.
+      - ${HOME}/.copilot:/root/.copilot:ro
+      # Mount project directories that workers will operate on, e.g.:
+      # - ${HOME}/dev:/workspace
+    environment:
+      - API_PORT=7777
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped
+
+volumes:
+  max-data:
