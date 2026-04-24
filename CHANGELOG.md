@@ -2,6 +2,13 @@
 
 All notable changes to Max are documented here.
 
+## [1.5.2] — 2026-04-24
+
+### Bug fixes
+- Fix `hire_agent` and skill create/remove broken on Windows due to hardcoded `/` path separator in traversal guards — now uses `path.sep`.
+
+---
+
 ## [1.5.0] — 2026-04-22
 
 ### Multi-agent system
