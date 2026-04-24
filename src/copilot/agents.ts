@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, mkdirSync, writeFileSync, existsSync, rmSync, copyFileSync } from "fs";
 import { createHash } from "crypto";
-import { join, dirname } from "path";
+import { join, dirname, sep } from "path";
 import { fileURLToPath } from "url";
 import { z } from "zod";
 import { approveAll, type CopilotClient, type CopilotSession, type Tool } from "@github/copilot-sdk";
@@ -223,7 +223,7 @@ export function createAgentFile(
     return `Invalid slug '${slug}': must be kebab-case (a-z0-9 with hyphens).`;
   }
   const filePath = join(AGENTS_DIR, `${slug}.agent.md`);
-  if (!filePath.startsWith(AGENTS_DIR + "/")) {
+  if (!filePath.startsWith(AGENTS_DIR + sep)) {
     return `Invalid slug '${slug}': path traversal detected.`;
   }
   if (existsSync(filePath)) {
@@ -252,7 +252,7 @@ export function removeAgentFile(slug: string): string | null {
     return `Cannot remove built-in agent '${slug}'. You can edit its file instead.`;
   }
   const filePath = join(AGENTS_DIR, `${slug}.agent.md`);
-  if (!filePath.startsWith(AGENTS_DIR + "/")) {
+  if (!filePath.startsWith(AGENTS_DIR + sep)) {
     return `Invalid slug '${slug}': path traversal detected.`;
   }
   if (!existsSync(filePath)) {

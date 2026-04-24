@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, mkdirSync, writeFileSync, existsSync, rmSync } from "fs";
-import { join, dirname } from "path";
+import { join, dirname, sep } from "path";
 import { homedir } from "os";
 import { fileURLToPath } from "url";
 import { SKILLS_DIR } from "../paths.js";
@@ -87,7 +87,7 @@ export function listSkills(): SkillInfo[] {
 export function createSkill(slug: string, name: string, description: string, instructions: string): string {
   const skillDir = join(LOCAL_SKILLS_DIR, slug);
   // Guard against path traversal
-  if (!skillDir.startsWith(LOCAL_SKILLS_DIR + "/")) {
+  if (!skillDir.startsWith(LOCAL_SKILLS_DIR + sep)) {
     return `Invalid slug '${slug}': must be a simple kebab-case name without path separators.`;
   }
   if (existsSync(skillDir)) {
@@ -117,7 +117,7 @@ ${instructions}
 export function removeSkill(slug: string): { ok: boolean; message: string } {
   const skillDir = join(LOCAL_SKILLS_DIR, slug);
   // Guard against path traversal
-  if (!skillDir.startsWith(LOCAL_SKILLS_DIR + "/")) {
+  if (!skillDir.startsWith(LOCAL_SKILLS_DIR + sep)) {
     return { ok: false, message: `Invalid slug '${slug}': must be a simple kebab-case name without path separators.` };
   }
   if (!existsSync(skillDir)) {
