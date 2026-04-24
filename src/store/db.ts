@@ -5,10 +5,10 @@ let db: Database.Database | undefined;
 let logInsertCount = 0;
 let fts5Available = false;
 
-export function getDb(): Database.Database {
+export function getDb(dbPath?: string): Database.Database {
   if (!db) {
-    ensureMaxHome();
-    db = new Database(DB_PATH);
+    if (!dbPath) ensureMaxHome();
+    db = new Database(dbPath ?? DB_PATH);
     db.pragma("journal_mode = WAL");
     db.exec(`
       CREATE TABLE IF NOT EXISTS worker_sessions (

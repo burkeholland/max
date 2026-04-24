@@ -27,7 +27,7 @@ try {
   process.exit(1);
 }
 
-const app = express();
+export const app = express();
 app.use(express.json());
 
 // Bearer token authentication middleware (skip /status health check)
