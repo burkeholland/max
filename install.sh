@@ -33,27 +33,72 @@ if [ "$DEV_MODE" = true ]; then
   echo ""
 fi
 
-# Check Node.js
-if ! command -v node &>/dev/null; then
+# On Windows (Git Bash / MSYS2 / Cygwin) the shell launched by `curl … | bash`
+# may not inherit the full Windows PATH, so Node.js won't be found even when it
+# is installed.  Prepend the most common installation directories so the checks
+# below work reliably.
+case "${OSTYPE:-}" in
+  msys*|cygwin*|win32*)
+    for _win_node_path in \
+      "/c/Program Files/nodejs" \
+      "/c/Program Files (x86)/nodejs"; do
+      [ -d "$_win_node_path" ] && export PATH="$_win_node_path:$PATH"
+    done
+    unset _win_node_path
+    # LOCALAPPDATA and APPDATA are Windows-format paths; convert them with
+    # cygpath (available in all MSYS2/Cygwin environments) before use.
+    if command -v cygpath &>/dev/null; then
+      if [ -n "${LOCALAPPDATA:-}" ]; then
+        _lad="$(cygpath -u "$LOCALAPPDATA")"
+        [ -d "$_lad/Programs/node" ] && export PATH="$_lad/Programs/node:$PATH"
+        unset _lad
+      fi
+      if [ -n "${APPDATA:-}" ]; then
+        _ad="$(cygpath -u "$APPDATA")"
+        [ -d "$_ad/npm" ] && export PATH="$_ad/npm:$PATH"
+        unset _ad
+      fi
+    fi
+    ;;
+esac
+
+# Check Node.js — accept both `node` (Unix) and `node.exe` (Windows)
+NODE_CMD=""
+if command -v node &>/dev/null; then
+  NODE_CMD="node"
+elif command -v node.exe &>/dev/null; then
+  NODE_CMD="node.exe"
+fi
+
+if [ -z "$NODE_CMD" ]; then
   error "✗ Node.js is required but not installed."
   echo "  Install it from https://nodejs.org (v18 or later)"
   exit 1
 fi
 
-NODE_VERSION=$(node -v | sed 's/v//' | cut -d. -f1)
+NODE_VERSION=$($NODE_CMD -v | sed 's/v//' | cut -d. -f1)
 if [ "$NODE_VERSION" -lt 18 ]; then
-  error "✗ Node.js v18+ is required (found $(node -v))"
+  error "✗ Node.js v18+ is required (found $($NODE_CMD -v))"
   echo "  Update from https://nodejs.org"
   exit 1
 fi
-echo -e "  ${GREEN}✓${RESET} Node.js $(node -v)"
+echo -e "  ${GREEN}✓${RESET} Node.js $($NODE_CMD -v)"
 
-# Check npm
-if ! command -v npm &>/dev/null; then
+# Check npm — accept both `npm` (Unix) and `npm.cmd` / `npm.exe` (Windows)
+NPM_CMD=""
+if command -v npm &>/dev/null; then
+  NPM_CMD="npm"
+elif command -v npm.cmd &>/dev/null; then
+  NPM_CMD="npm.cmd"
+elif command -v npm.exe &>/dev/null; then
+  NPM_CMD="npm.exe"
+fi
+
+if [ -z "$NPM_CMD" ]; then
   error "✗ npm is required but not installed."
   exit 1
 fi
-echo -e "  ${GREEN}✓${RESET} npm $(npm -v)"
+echo -e "  ${GREEN}✓${RESET} npm $($NPM_CMD -v)"
 
 # Check Copilot CLI
 if command -v copilot &>/dev/null; then
@@ -76,14 +121,14 @@ echo ""
 if [ "$DEV_MODE" = true ]; then
   # Dev mode: build locally and run setup from source
   info "Building from local source..."
-  npm run build
+  $NPM_CMD run build
   echo ""
   info "Running setup from local build..."
   echo ""
-  node dist/setup.js < /dev/tty
+  $NODE_CMD dist/setup.js < /dev/tty
 else
   info "Installing heymax..."
-  npm install -g heymax
+  $NPM_CMD install -g heymax
   echo ""
   success "✅ Max installed successfully!"
   echo ""
