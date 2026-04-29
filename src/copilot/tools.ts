@@ -7,7 +7,7 @@ import { homedir } from "os";
 import { listSkills, createSkill, removeSkill } from "./skills.js";
 import { config, persistModel } from "../config.js";
 import { SESSIONS_DIR } from "../paths.js";
-import { getCurrentSourceChannel, switchSessionModel } from "./orchestrator.js";
+import { getCurrentSourceKey, switchSessionModel } from "./orchestrator.js";
 import { getRouterConfig, updateRouterConfig } from "./router.js";
 import { ensureWikiStructure, readPage, writePage, deletePage, listPages, writeRawSource, listSources, getWikiDir, assertPagePath } from "../wiki/fs.js";
 import { searchIndex, addToIndex, removeFromIndex, parseIndex, buildIndexEntryForPage, type IndexEntry } from "../wiki/index-manager.js";
@@ -99,7 +99,7 @@ export function createTools(deps: ToolDeps): Tool<any>[] {
           return `Failed to create session for @${agent.slug}: ${msg}`;
         }
 
-        const task = registerTask(agent.slug, args.summary, getCurrentSourceChannel());
+        const task = registerTask(agent.slug, args.summary, getCurrentSourceKey());
 
         // Persist task to DB
         const db = getDb();

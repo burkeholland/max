@@ -122,7 +122,7 @@ export function createBot(): Bot {
     )
   );
   bot.command("cancel", async (ctx) => {
-    const cancelled = await cancelCurrentMessage();
+    const cancelled = await cancelCurrentMessage(`telegram:${ctx.chat.id}`);
     await ctx.reply(cancelled ? "⛔ Cancelled." : "Nothing to cancel.");
   });
   bot.command("model", async (ctx) => {

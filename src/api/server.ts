@@ -135,11 +135,18 @@ app.post("/message", (req: Request, res: Response) => {
   res.json({ status: "queued" });
 });
 
-// Cancel the current in-flight message
-app.post("/cancel", async (_req: Request, res: Response) => {
-  const cancelled = await cancelCurrentMessage();
-  // Notify all SSE clients that the message was cancelled
-  for (const [, sseRes] of sseClients) {
+// Cancel the current in-flight message for a specific TUI connection.
+app.post("/cancel", async (req: Request, res: Response) => {
+  const { connectionId } = req.body as { connectionId?: string };
+
+  if (!connectionId || !sseClients.has(connectionId)) {
+    res.status(400).json({ error: "Missing or invalid 'connectionId'. Connect to /stream first." });
+    return;
+  }
+
+  const cancelled = await cancelCurrentMessage(`tui:${connectionId}`);
+  const sseRes = sseClients.get(connectionId);
+  if (sseRes) {
     sseRes.write(
       `data: ${JSON.stringify({ type: "cancelled" })}\n\n`
     );
@@ -312,4 +319,12 @@ export function broadcastToSSE(text: string): void {
       `data: ${JSON.stringify({ type: "message", content: text })}\n\n`
     );
   }
+}
+
+export function sendToSSEConnection(connectionId: string, text: string): void {
+  const res = sseClients.get(connectionId);
+  if (!res) return;
+  res.write(
+    `data: ${JSON.stringify({ type: "message", content: text })}\n\n`
+  );
 }

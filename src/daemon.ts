@@ -1,7 +1,13 @@
 import { getClient, stopClient } from "./copilot/client.js";
 import { initOrchestrator, setMessageLogger, setProactiveNotify, getAgentInfo, shutdownAgents } from "./copilot/orchestrator.js";
-import { startApiServer, broadcastToSSE } from "./api/server.js";
+import { startApiServer, broadcastToSSE, sendToSSEConnection } from "./api/server.js";
 import { createBot, startBot, stopBot, sendProactiveMessage } from "./telegram/bot.js";
+import {
+  createBot as createFeishuBot,
+  startBot as startFeishuBot,
+  stopBot as stopFeishuBot,
+  sendProactiveMessage as sendFeishuProactiveMessage,
+} from "./feishu/bot.js";
 import { getDb, closeDb, getState } from "./store/db.js";
 import { config } from "./config.js";
 import { spawn } from "child_process";
@@ -105,13 +111,19 @@ async function main(): Promise<void> {
   console.log("[max] Orchestrator session ready");
 
   // Wire up proactive notifications — route to the originating channel
-  setProactiveNotify((text, channel) => {
-    console.log(`[max] bg-notify (${channel ?? "all"}) ⟵  ${truncate(text)}`);
-    if (!channel || channel === "telegram") {
+  setProactiveNotify((text, destination) => {
+    console.log(`[max] bg-notify (${destination ?? "all"}) ⟵  ${truncate(text)}`);
+    if (!destination || destination.startsWith("telegram:")) {
       if (config.telegramEnabled) sendProactiveMessage(text);
     }
-    if (!channel || channel === "tui") {
+    if (!destination || destination === "tui") {
       broadcastToSSE(text);
+    }
+    if (destination?.startsWith("tui:")) {
+      sendToSSEConnection(destination.slice(4), text);
+    }
+    if (!destination || destination.startsWith("feishu:")) {
+      if (config.feishuEnabled) sendFeishuProactiveMessage(text);
     }
   });
 
@@ -130,6 +142,16 @@ async function main(): Promise<void> {
     console.log("[max] Telegram user ID missing — skipping bot. Run 'max setup' and enter your Telegram user ID (get it from @userinfobot).");
   }
 
+  // Start Feishu bot (if configured)
+  if (config.feishuEnabled) {
+    createFeishuBot();
+    await startFeishuBot();
+  } else if (!config.feishuAppId && !config.feishuAppSecret && !config.feishuAuthorizedOpenId) {
+    console.log("[max] Feishu not configured — skipping bot. Run 'max setup' to configure.");
+  } else {
+    console.log("[max] Feishu config incomplete — skipping bot. Run 'max setup' and provide App ID, App Secret, and authorized open_id.");
+  }
+
   console.log("[max] Max is fully operational.");
 
   // Non-blocking update check
@@ -142,8 +164,13 @@ async function main(): Promise<void> {
     .catch(() => {});  // silent — network may be unavailable
 
   // Notify user if this is a restart (not a fresh start)
-  if (config.telegramEnabled && process.env.MAX_RESTARTED === "1") {
-    await sendProactiveMessage("I'm back online 🟢").catch(() => {});
+  if (process.env.MAX_RESTARTED === "1") {
+    if (config.telegramEnabled) {
+      await sendProactiveMessage("I'm back online 🟢").catch(() => {});
+    }
+    if (config.feishuEnabled) {
+      await sendFeishuProactiveMessage("I'm back online 🟢").catch(() => {});
+    }
     delete process.env.MAX_RESTARTED;
   }
 }
@@ -180,6 +207,9 @@ async function shutdown(): Promise<void> {
   if (config.telegramEnabled) {
     try { await stopBot(); } catch { /* best effort */ }
   }
+  if (config.feishuEnabled) {
+    try { await stopFeishuBot(); } catch { /* best effort */ }
+  }
 
   // Destroy all active agent sessions
   await shutdownAgents();
@@ -202,6 +232,10 @@ export async function restartDaemon(): Promise<void> {
   if (config.telegramEnabled) {
     await sendProactiveMessage("Restarting — back in a sec ⏳").catch(() => {});
     try { await stopBot(); } catch { /* best effort */ }
+  }
+  if (config.feishuEnabled) {
+    await sendFeishuProactiveMessage("Restarting — back in a sec ⏳").catch(() => {});
+    try { await stopFeishuBot(); } catch { /* best effort */ }
   }
 
   // Destroy all active agent sessions

@@ -248,6 +248,89 @@ ${BOLD}╔═══════════════════════�
     console.log(`\n${DIM}  Skipping Google. You can always set it up later with: max setup${RESET}\n`);
   }
 
+  // ── Feishu Setup ────────────────────────────────
+  console.log(`${BOLD}━━━ Feishu Setup (optional) ━━━${RESET}\n`);
+  console.log(`Feishu (飞书) is the chat app available in mainland China. If you can't`);
+  console.log(`use Telegram, this lets you talk to Max from your phone instead.`);
+  console.log();
+
+  let feishuAppId = existing.FEISHU_APP_ID || "";
+  let feishuAppSecret = existing.FEISHU_APP_SECRET || "";
+  let feishuOpenId = existing.FEISHU_AUTHORIZED_OPEN_ID || "";
+  let feishuDomain = (existing.FEISHU_DOMAIN as "feishu" | "lark" | undefined) || "feishu";
+
+  const setupFeishu = await askYesNo(rl, "Would you like to set up Feishu?");
+
+  if (setupFeishu) {
+    // ── Step 1: Pick domain ──
+    console.log(`\n${BOLD}Step 1: Choose your Feishu region${RESET}\n`);
+    console.log(`  ${CYAN}1${RESET}  ${BOLD}Feishu${RESET} — mainland China (open.feishu.cn) ${DIM}(default)${RESET}`);
+    console.log(`  ${CYAN}2${RESET}  ${BOLD}Lark${RESET}   — international (open.larksuite.com)`);
+    console.log();
+    const domainInput = (await ask(rl, `  Pick a number ${DIM}(1-2, Enter for default)${RESET}: `)).trim();
+    feishuDomain = domainInput === "2" ? "lark" : "feishu";
+    const consoleUrl =
+      feishuDomain === "lark"
+        ? "https://open.larksuite.com"
+        : "https://open.feishu.cn";
+
+    // ── Step 2: Create the bot app ──
+    console.log(`\n${BOLD}Step 2: Create a self-built app${RESET}\n`);
+    console.log(`  1. Open ${CYAN}${consoleUrl}${RESET} and sign in`);
+    console.log(`  2. Go to ${BOLD}Developer Console${RESET} → ${BOLD}Create Custom App${RESET}`);
+    console.log(`  3. Under ${BOLD}Add features${RESET}, enable ${BOLD}Bot${RESET}`);
+    console.log(`  4. Under ${BOLD}Event Subscriptions${RESET}, switch transport to ${BOLD}Long connection (WebSocket)${RESET}`);
+    console.log(`  5. Subscribe to the event ${CYAN}im.message.receive_v1${RESET}`);
+    console.log(`  6. Under ${BOLD}Permissions & Scopes${RESET}, grant:`);
+    console.log(`       ${CYAN}im:message${RESET}, ${CYAN}im:message:send_as_bot${RESET}`);
+    console.log(`  7. ${BOLD}Create a version${RESET} of the app and publish it (or enable test mode)`);
+    console.log(`  8. Copy the ${BOLD}App ID${RESET} and ${BOLD}App Secret${RESET} from the ${BOLD}Credentials & Basic Info${RESET} page`);
+    console.log();
+
+    feishuAppId = await askRequired(
+      rl,
+      `  App ID${feishuAppId ? ` ${DIM}(current: ${feishuAppId.slice(0, 8)}...)${RESET}` : ""}: `
+    );
+    feishuAppSecret = await askRequired(
+      rl,
+      `  App Secret${feishuAppSecret ? ` ${DIM}(current set)${RESET}` : ""}: `
+    );
+
+    // ── Step 3: Lock down to your open_id ──
+    console.log(`\n${BOLD}Step 3: Lock down your bot${RESET}\n`);
+    console.log(`${YELLOW}  ⚠  IMPORTANT: anyone who finds your bot can DM it.${RESET}`);
+    console.log(`  Max uses your Feishu ${BOLD}open_id${RESET} to ensure only YOU can control it.`);
+    console.log();
+    console.log(`  To find your open_id:`);
+    console.log(`  1. Open ${CYAN}${consoleUrl}/document/server-docs/api-call-guide/api-explorer${RESET}`);
+    console.log(`     (Developer Console → ${BOLD}API Debugger${RESET} / ${BOLD}API Explorer${RESET})`);
+    console.log(`  2. Pick the API ${CYAN}contact.v3.user.batch_get_id${RESET}`);
+    console.log(`  3. Authorize as your app, set ${BOLD}user_id_type=open_id${RESET},`);
+    console.log(`     and pass your mobile number or email in the request body`);
+    console.log(`  4. Copy the returned ${BOLD}open_id${RESET} (looks like ${DIM}ou_abc123...${RESET})`);
+    console.log();
+    console.log(`  ${DIM}Tip: you can also see open_ids of test users under${RESET}`);
+    console.log(`  ${DIM}Developer Console → your app → Test Users.${RESET}`);
+    console.log();
+
+    while (true) {
+      const openIdInput = await askRequired(
+        rl,
+        `  Your open_id${feishuOpenId ? ` ${DIM}(current: ${feishuOpenId})${RESET}` : ""}: `
+      );
+      if (/^ou_[A-Za-z0-9]+$/.test(openIdInput.trim())) {
+        feishuOpenId = openIdInput.trim();
+        break;
+      }
+      console.log(`${YELLOW}  That doesn't look like an open_id. It should start with 'ou_'.${RESET}`);
+    }
+
+    console.log(`\n${GREEN}  ✓ Feishu locked down — only ${feishuOpenId} can control Max.${RESET}`);
+    console.log(`${DIM}    Credentials are saved now and will be verified when Max starts.${RESET}\n`);
+  } else {
+    console.log(`\n${DIM}  Skipping Feishu. You can always set it up later with: max setup${RESET}\n`);
+  }
+
   // ── Model picker ─────────────────────────────────────────
   console.log(`\n${BOLD}━━━ Default Model ━━━${RESET}\n`);
   console.log(`${DIM}Fetching available models from Copilot...${RESET}`);
@@ -272,11 +355,24 @@ ${BOLD}╔═══════════════════════�
   const apiPort = existing.API_PORT || "7777";
   const lines: string[] = [];
   if (telegramToken) lines.push(`TELEGRAM_BOT_TOKEN=${telegramToken}`);
-  if (userId) lines.push(`AUTHORIZED_USER_ID=${userId}`);
-  lines.push(`API_PORT=${apiPort}`);
+  if (userId) lines.push(`AUTHORIZED_USER_ID=${userId}`);  if (feishuAppId) lines.push(`FEISHU_APP_ID=${feishuAppId}`);
+  if (feishuAppSecret) lines.push(`FEISHU_APP_SECRET=${feishuAppSecret}`);
+  if (feishuOpenId) lines.push(`FEISHU_AUTHORIZED_OPEN_ID=${feishuOpenId}`);
+  if (feishuAppId || feishuAppSecret || feishuOpenId) lines.push(`FEISHU_DOMAIN=${feishuDomain}`);  lines.push(`API_PORT=${apiPort}`);
   lines.push(`COPILOT_MODEL=${model}`);
 
   writeFileSync(ENV_PATH, lines.join("\n") + "\n");
+
+  const chatDestinations: string[] = [];
+  if (telegramToken && userId) chatDestinations.push("Telegram");
+  if (feishuAppId && feishuAppSecret && feishuOpenId) {
+    chatDestinations.push(feishuDomain === "lark" ? "Lark" : "Feishu");
+  }
+  const chatLabel =
+    chatDestinations.length === 0 ? "Connect via terminal:" :
+    chatDestinations.length === 1 ? `Open ${chatDestinations[0]} and message your bot!` :
+    `Open ${chatDestinations.join(" or ")} and message your bot!`;
+  const chatCommand = chatDestinations.length === 0 ? "max tui" : "(message your bot in chat)";
 
   // ── Done ─────────────────────────────────────────────────
   console.log(`
@@ -291,8 +387,8 @@ ${BOLD}Get started:${RESET}
   ${CYAN}2.${RESET} Start Max:
      ${BOLD}max start${RESET}
 
-  ${CYAN}3.${RESET} ${setupTelegram ? "Open Telegram and message your bot!" : "Connect via terminal:"}
-     ${BOLD}${setupTelegram ? "(message your bot on Telegram)" : "max tui"}${RESET}
+    ${CYAN}3.${RESET} ${chatLabel}
+      ${BOLD}${chatCommand}${RESET}
 
 ${BOLD}Things to try:${RESET}
 
