@@ -711,8 +711,21 @@ function apiDelete(path: string, cb: (data: any) => void): void {
 function sendCancel(): void {
   stopThinking("user-cancel");
   debugLog("cancel-send", { requestId: activeRequestId, isStreaming });
+  if (!connectionId) {
+    console.error(C.red("  Failed to cancel: not connected."));
+    rl.prompt();
+    return;
+  }
+  const json = JSON.stringify({ connectionId });
   const url = new URL("/cancel", API_BASE);
-  const req = http.request(url, { method: "POST", headers: authHeaders() }, (res) => {
+  const req = http.request(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(json),
+      ...authHeaders(),
+    },
+  }, (res) => {
     let data = "";
     res.on("data", (chunk) => (data += chunk));
     res.on("end", () => {
@@ -727,6 +740,7 @@ function sendCancel(): void {
     console.error(C.red(`  Failed to cancel: ${err.message}`));
     rl.prompt();
   });
+  req.write(json);
   req.end();
 }
 

@@ -29,9 +29,12 @@ const HEALTH_CHECK_INTERVAL_MS = 30_000;
 
 const ORCHESTRATOR_SESSION_KEY = "orchestrator_session_id";
 
+export type SourceChannel = "telegram" | "tui" | "feishu";
+
 export type MessageSource =
   | { type: "telegram"; chatId: number; messageId: number }
   | { type: "tui"; connectionId: string }
+  | { type: "feishu"; chatId: string; messageId: string; openId: string }
   | { type: "background" };
 
 export type MessageCallback = (text: string, done: boolean) => void;
@@ -43,8 +46,8 @@ export function setMessageLogger(fn: LogFn): void {
   logMessage = fn;
 }
 
-// Proactive notification — sends unsolicited messages to the user on a specific channel
-type ProactiveNotifyFn = (text: string, channel?: "telegram" | "tui") => void;
+// Proactive notification — sends unsolicited messages to the user on a specific destination.
+type ProactiveNotifyFn = (text: string, destination?: string) => void;
 let proactiveNotifyFn: ProactiveNotifyFn | undefined;
 
 export function setProactiveNotify(fn: ProactiveNotifyFn): void {
@@ -73,7 +76,7 @@ type QueuedMessage = {
   prompt: string;
   attachments?: Array<{ type: "file"; path: string; displayName?: string }>;
   callback: MessageCallback;
-  sourceChannel?: "telegram" | "tui";
+  sourceChannel?: SourceChannel;
   /** Target agent slug for @mention routing. If undefined, goes to orchestrator. */
   targetAgent?: string;
   /** Conversation channel key for sticky routing, e.g. "telegram:123" or "tui:conn-1". */
@@ -85,11 +88,30 @@ const messageQueue: QueuedMessage[] = [];
 let processing = false;
 let currentCallback: MessageCallback | undefined;
 /** The channel currently being processed — tools use this to tag new workers. */
-let currentSourceChannel: "telegram" | "tui" | undefined;
+let currentSourceChannel: SourceChannel | undefined;
+/** The exact source currently being processed — used for scoped cancel/result delivery. */
+let currentSourceKey: string | undefined;
 
 /** Get the channel that originated the message currently being processed. */
-export function getCurrentSourceChannel(): "telegram" | "tui" | undefined {
+export function getCurrentSourceChannel(): SourceChannel | undefined {
   return currentSourceChannel;
+}
+
+export function getCurrentSourceKey(): string | undefined {
+  return currentSourceKey;
+}
+
+function getSourceKey(source: MessageSource): string | undefined {
+  switch (source.type) {
+    case "telegram":
+      return `telegram:${source.chatId}`;
+    case "tui":
+      return `tui:${source.connectionId}`;
+    case "feishu":
+      return `feishu:${source.chatId}`;
+    default:
+      return undefined;
+  }
 }
 
 function getSessionConfig() {
@@ -113,8 +135,7 @@ export function feedAgentResult(taskId: string, agentSlug: string, result: strin
         // Route notification to the task's origin channel
         const tasks = getActiveTasks();
         const task = tasks.find((t) => t.taskId === taskId);
-        const channel = task?.originChannel as "telegram" | "tui" | undefined;
-        proactiveNotifyFn(_text, channel);
+        proactiveNotifyFn(_text, task?.originChannel);
       }
     }
   );
@@ -369,6 +390,7 @@ async function processQueue(): Promise<void> {
   while (messageQueue.length > 0) {
     const item = messageQueue.shift()!;
     currentSourceChannel = item.sourceChannel;
+    currentSourceKey = item.channelKey;
     try {
       let result: string;
 
@@ -409,6 +431,7 @@ async function processQueue(): Promise<void> {
       item.reject(err);
     }
     currentSourceChannel = undefined;
+    currentSourceKey = undefined;
   }
 
   processing = false;
@@ -430,7 +453,8 @@ export async function sendToOrchestrator(
 ): Promise<void> {
   const sourceLabel =
     source.type === "telegram" ? "telegram" :
-    source.type === "tui" ? "tui" : "background";
+    source.type === "tui" ? "tui" :
+    source.type === "feishu" ? "feishu" : "background";
   logMessage("in", sourceLabel, prompt);
 
   // Parse @mention routing (e.g., "@coder fix the bug" → target "coder")
@@ -447,16 +471,18 @@ export async function sendToOrchestrator(
   const logRole = source.type === "background" ? "system" : "user";
 
   // Determine the source channel for agent origin tracking
-  const sourceChannel: "telegram" | "tui" | undefined =
+  const sourceChannel: SourceChannel | undefined =
     source.type === "telegram" ? "telegram" :
-    source.type === "tui" ? "tui" : undefined;
+    source.type === "tui" ? "tui" :
+    source.type === "feishu" ? "feishu" : undefined;
+  const channelKey = getSourceKey(source);
 
   // Enqueue and process
   void (async () => {
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         const finalContent = await new Promise<string>((resolve, reject) => {
-          messageQueue.push({ prompt: taggedPrompt, attachments, callback, sourceChannel, targetAgent, resolve, reject });
+          messageQueue.push({ prompt: taggedPrompt, attachments, callback, sourceChannel, targetAgent, channelKey, resolve, reject });
           processQueue();
         });
         // Deliver response to user FIRST, then log best-effort
@@ -491,17 +517,19 @@ export async function sendToOrchestrator(
   })();
 }
 
-/** Cancel the in-flight message and drain the queue. */
-export async function cancelCurrentMessage(): Promise<boolean> {
-  // Drain any queued messages
-  const drained = messageQueue.length;
-  while (messageQueue.length > 0) {
-    const item = messageQueue.shift()!;
+/** Cancel the in-flight message and queued work for a specific source when provided. */
+export async function cancelCurrentMessage(sourceKey?: string): Promise<boolean> {
+  let drained = 0;
+  for (let i = messageQueue.length - 1; i >= 0; i--) {
+    const item = messageQueue[i];
+    if (sourceKey && item.channelKey !== sourceKey) continue;
+    messageQueue.splice(i, 1);
     item.reject(new Error("Cancelled"));
+    drained++;
   }
 
   // Abort the active session request
-  if (orchestratorSession && currentCallback) {
+  if (orchestratorSession && currentCallback && (!sourceKey || currentSourceKey === sourceKey)) {
     try {
       await orchestratorSession.abort();
       console.log(`[max] Aborted in-flight request`);
